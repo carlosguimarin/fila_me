@@ -2,45 +2,45 @@ import tkinter as tk
 
 from src.fila_me.config.settings import (
     NOME_APLICACAO,
-    LARGURA_JANELA,
-    ALTURA_JANELA,
 )
-
-from src.fila_me.models.fila import Fila
 
 from src.fila_me.ui.estilos import (
     COR_FUNDO,
-    COR_PAINEL,
     COR_TEXTO,
     COR_SECUNDARIO,
     COR_DESTAQUE,
-    COR_DESTAQUE_HOVER,
     COR_BOTAO,
     FONTE_PADRAO,
 )
 
+from src.fila_me.integracao.cliente import buscar_estado
+
 
 class JanelaPrincipal:
-    def __init__(self, root, fila):
+    def __init__(self, root, fila=None):
         self.root = root
         self.fila = fila
         self.fixado = True
 
         self.configurar_janela()
         self.criar_interface()
+        self.atualizar_estado()
 
     def configurar_janela(self):
         self.root.title(NOME_APLICACAO)
 
-        self.root.geometry(
-            f"{LARGURA_JANELA}x{ALTURA_JANELA}"
-        )
+        self.root.geometry("380x430")
 
         self.root.resizable(False, False)
-        self.root.configure(bg=COR_FUNDO)
 
-        # Mantém a janela sempre sobre as outras.
-        self.root.attributes("-topmost", True)
+        self.root.configure(
+            bg=COR_FUNDO
+        )
+
+        self.root.attributes(
+            "-topmost",
+            True,
+        )
 
     def criar_interface(self):
 
@@ -56,15 +56,17 @@ class JanelaPrincipal:
             font=(FONTE_PADRAO, 11, "bold"),
         )
 
-        titulo.pack(pady=(16, 2))
+        titulo.pack(
+            pady=(14, 2)
+        )
 
         # -------------------------
-        # SUBTÍTULO
+        # PRÓXIMO TÉCNICO
         # -------------------------
 
         subtitulo = tk.Label(
             self.root,
-            text="É a vez de",
+            text="Próximo técnico",
             bg=COR_FUNDO,
             fg=COR_SECUNDARIO,
             font=(FONTE_PADRAO, 9),
@@ -72,69 +74,44 @@ class JanelaPrincipal:
 
         subtitulo.pack()
 
-        # -------------------------
-        # NOME
-        # -------------------------
-
         self.nome_label = tk.Label(
             self.root,
-            text=self.fila.tecnico_atual,
+            text="—",
             bg=COR_FUNDO,
             fg=COR_TEXTO,
             font=(FONTE_PADRAO, 27, "bold"),
         )
 
-        self.nome_label.pack(pady=(0, 8))
+        self.nome_label.pack(
+            pady=(0, 12)
+        )
 
         # -------------------------
-        # BOTÕES
+        # HISTÓRICO
         # -------------------------
 
-        frame_botoes = tk.Frame(
+        historico_titulo = tk.Label(
+            self.root,
+            text="Últimos chamados",
+            bg=COR_FUNDO,
+            fg=COR_SECUNDARIO,
+            font=(FONTE_PADRAO, 9, "bold"),
+        )
+
+        historico_titulo.pack(
+            anchor="w",
+            padx=20,
+        )
+
+        self.frame_historico = tk.Frame(
             self.root,
             bg=COR_FUNDO,
         )
 
-        frame_botoes.pack()
-
-        self.btn_anterior = tk.Button(
-            frame_botoes,
-            text="‹  Anterior",
-            command=self.anterior,
-            width=12,
-            bg=COR_BOTAO,
-            fg=COR_TEXTO,
-            activebackground="#45474C",
-            activeforeground=COR_TEXTO,
-            relief="flat",
-            bd=0,
-            font=(FONTE_PADRAO, 9, "bold"),
-            cursor="hand2",
-        )
-
-        self.btn_anterior.pack(
-            side="left",
-            padx=4,
-        )
-
-        self.btn_proximo = tk.Button(
-            frame_botoes,
-            text="Próximo  ›",
-            command=self.proximo,
-            width=12,
-            bg=COR_DESTAQUE,
-            fg="white",
-            activebackground=COR_DESTAQUE_HOVER,
-            activeforeground="white",
-            relief="flat",
-            bd=0,
-            font=(FONTE_PADRAO, 9, "bold"),
-            cursor="hand2",
-        )
-
-        self.btn_proximo.pack(
-            side="left",
-            padx=4,
+        self.frame_historico.pack(
+            fill="x",
+            padx=20,
+            pady=(5, 0),
         )
 
         # -------------------------
@@ -155,22 +132,72 @@ class JanelaPrincipal:
             cursor="hand2",
         )
 
-        self.btn_fixar.pack(pady=(9, 0))
-
-    def atualizar_nome(self):
-        self.nome_label.config(
-            text=self.fila.tecnico_atual
+        self.btn_fixar.pack(
+            pady=(8, 0)
         )
 
-    def proximo(self):
-        self.fila.proximo()
-        self.atualizar_nome()
+    def atualizar_estado(self):
 
-    def anterior(self):
-        self.fila.anterior()
-        self.atualizar_nome()
+        estado = buscar_estado()
+
+        if estado and estado.get("sucesso"):
+
+            proximo = estado.get(
+                "proximo_tecnico",
+                "—",
+            )
+
+            historico = estado.get(
+                "historico",
+                [],
+            )
+
+            self.nome_label.config(
+                text=proximo
+            )
+
+            self.atualizar_historico(
+                historico
+            )
+
+        self.root.after(
+            3000,
+            self.atualizar_estado,
+        )
+
+    def atualizar_historico(self, historico):
+
+        for widget in self.frame_historico.winfo_children():
+            widget.destroy()
+
+        for item in historico[:9]:
+
+            tecnico = item.get(
+                "tecnico",
+                "—",
+            )
+
+            numero_ticket = item.get(
+                "numero_ticket",
+                "—",
+            )
+
+            linha = tk.Label(
+                self.frame_historico,
+                text=f"{tecnico}  —  Ticket {numero_ticket}",
+                bg=COR_FUNDO,
+                fg=COR_TEXTO,
+                font=(FONTE_PADRAO, 9),
+                anchor="w",
+            )
+
+            linha.pack(
+                fill="x",
+                pady=1,
+            )
 
     def alternar_fixacao(self):
+
         self.fixado = not self.fixado
 
         self.root.attributes(
@@ -179,10 +206,13 @@ class JanelaPrincipal:
         )
 
         if self.fixado:
+
             self.btn_fixar.config(
                 text="📌  Fixado no topo"
             )
+
         else:
+
             self.btn_fixar.config(
                 text="📍  Fixar no topo"
             )
