@@ -1,0 +1,5 @@
+TECNICOS = ["Carlos", "Luis", "Daniel"]
+
+NOME_APLICACAO = "Fila N1"
+LARGURA_JANELA = 360
+ALTURA_JANELA = 240
