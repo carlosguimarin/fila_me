@@ -1,0 +1,62 @@
+FILA ME — INSTALAÇÃO
+
+1. BAIXAR O FILA ME
+
+Baixe:
+- FilaME.exe
+- FilaME-Extensao.zip
+
+2. ARQUIVO .ENV
+
+Solicite o arquivo .env à equipe de desenvolvimento.
+
+Coloque o arquivo .env na mesma pasta do FilaME.exe.
+
+Exemplo:
+
+FilaME\
+├── FilaME.exe
+└── .env
+
+IMPORTANTE:
+Não compartilhe o arquivo .env.
+
+3. INSTALAR A EXTENSÃO
+
+Extraia o arquivo FilaME-Extensao.zip em uma pasta.
+
+Abra o Microsoft Edge e acesse:
+
+edge://extensions
+
+Ative:
+
+Developer mode
+
+Clique em:
+
+Load unpacked
+
+Selecione a pasta onde a extensão foi extraída.
+
+4. USAR O FILA ME
+
+Abra o OTRS normalmente.
+
+Depois execute:
+
+FilaME.exe
+
+Faça login com seu usuário.
+
+Pronto.
+
+REQUISITOS
+
+- Windows 10 ou Windows 11
+- Microsoft Edge
+- Acesso ao OTRS
+
+EM CASO DE PROBLEMAS
+
+Entre em contato com a equipe de desenvolvimento.
