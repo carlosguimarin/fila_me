@@ -2,9 +2,12 @@
     "manifest_version": 3,
     "name": "Fila ME - OTRS",
     "version": "0.1.0",
-    "description": "Leitura dos tickets novos do OTRS.",
-    "permissions": [],
+    "description": "Leitura e acompanhamento dos tickets do OTRS.",
+    "permissions": [
+        "storage"
+    ],
     "host_permissions": [
+        "https://helpdesk.mpsc.mp.br/otrs/*",
         "http://127.0.0.1:8765/*"
     ],
     "background": {

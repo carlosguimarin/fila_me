@@ -1,11 +1,15 @@
 import json
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from http.server import (
+    BaseHTTPRequestHandler,
+    ThreadingHTTPServer,
+)
 
 from src.fila_me.database.banco import (
     criar_tabelas,
     registrar_ticket_e_atribuir,
     buscar_ultimas_atribuicoes,
     buscar_proximo_tecnico,
+    atualizar_atribuicao_owner,
 )
 
 
@@ -13,42 +17,87 @@ HOST = "127.0.0.1"
 PORTA = 8765
 
 
-class ServidorFilaME(BaseHTTPRequestHandler):
+class ServidorFilaME(
+    BaseHTTPRequestHandler
+):
 
-    def enviar_json(self, dados, status=200):
+    def enviar_json(
+        self,
+        dados,
+        status=200,
+    ):
+
         resposta = json.dumps(
             dados,
             ensure_ascii=False,
         ).encode("utf-8")
 
         self.send_response(status)
+
         self.send_header(
             "Content-Type",
             "application/json; charset=utf-8",
         )
+
         self.send_header(
             "Content-Length",
             str(len(resposta)),
         )
+
         self.end_headers()
 
-        self.wfile.write(resposta)
+        self.wfile.write(
+            resposta
+        )
+
+    def ler_json(self):
+
+        tamanho = int(
+            self.headers.get(
+                "Content-Length",
+                0,
+            )
+        )
+
+        dados = self.rfile.read(
+            tamanho
+        )
+
+        return json.loads(
+            dados.decode("utf-8")
+        )
 
     def do_GET(self):
+
         if self.path != "/estado":
             self.send_error(404)
             return
 
         try:
-            atribuicoes = buscar_ultimas_atribuicoes(9)
-            proximo_tecnico = buscar_proximo_tecnico()
+
+            atribuicoes = (
+                buscar_ultimas_atribuicoes(9)
+            )
+
+            proximo_tecnico = (
+                buscar_proximo_tecnico()
+            )
 
             historico = []
 
-            for numero_ticket, tecnico, atribuido_em in atribuicoes:
+            for (
+                numero_ticket,
+                tecnico,
+                atribuido_em,
+            ) in atribuicoes:
+
                 historico.append({
-                    "numero_ticket": numero_ticket,
-                    "tecnico": tecnico,
+                    "numero_ticket":
+                        numero_ticket,
+
+                    "tecnico":
+                        tecnico,
+
                     "atribuido_em": (
                         atribuido_em.isoformat()
                         if atribuido_em
@@ -58,12 +107,19 @@ class ServidorFilaME(BaseHTTPRequestHandler):
 
             self.enviar_json({
                 "sucesso": True,
-                "proximo_tecnico": proximo_tecnico,
-                "historico": historico,
+
+                "proximo_tecnico":
+                    proximo_tecnico,
+
+                "historico":
+                    historico,
             })
 
         except Exception as erro:
-            print(f"Erro ao consultar estado: {erro}")
+
+            print(
+                f"Erro ao consultar estado: {erro}"
+            )
 
             self.enviar_json(
                 {
@@ -74,57 +130,161 @@ class ServidorFilaME(BaseHTTPRequestHandler):
             )
 
     def do_POST(self):
-        if self.path != "/tickets":
-            self.send_error(404)
+
+        if self.path == "/tickets":
+
+            self.processar_tickets()
+
             return
 
-        tamanho = int(
-            self.headers.get("Content-Length", 0)
-        )
+        if self.path == "/owner":
 
-        dados = self.rfile.read(tamanho)
+            self.processar_owner()
+
+            return
+
+        self.send_error(404)
+
+    def processar_tickets(self):
 
         try:
-            payload = json.loads(
-                dados.decode("utf-8")
-            )
 
-            tickets = payload.get("tickets", [])
+            payload = self.ler_json()
+
+            tickets = payload.get(
+                "tickets",
+                [],
+            )
 
             novos = []
             existentes = []
+            owners_processados = []
 
-            for numero_ticket in tickets:
-                resultado = registrar_ticket_e_atribuir(
-                    int(numero_ticket)
+            for ticket in tickets:
+
+                if isinstance(
+                    ticket,
+                    dict,
+                ):
+
+                    numero_ticket = (
+                        ticket.get(
+                            "numero"
+                        )
+                    )
+
+                    owner = (
+                        ticket.get(
+                            "owner"
+                        )
+                    )
+
+                else:
+
+                    numero_ticket = ticket
+                    owner = None
+
+                if not numero_ticket:
+                    continue
+
+                numero_ticket = int(
+                    numero_ticket
+                )
+
+                resultado = (
+                    registrar_ticket_e_atribuir(
+                        numero_ticket
+                    )
                 )
 
                 if resultado:
-                    novos.append(resultado)
+
+                    resultado["owner"] = owner
+
+                    novos.append(
+                        resultado
+                    )
+
+                    print(
+                        f"Ticket novo: "
+                        f"{numero_ticket} "
+                        f"| Owner: {owner}"
+                    )
+
                 else:
-                    existentes.append(numero_ticket)
+
+                    existentes.append({
+                        "numero":
+                            numero_ticket,
+
+                        "owner":
+                            owner,
+                    })
+
+                if owner:
+
+                    resultado_owner = (
+                        atualizar_atribuicao_owner(
+                            numero_ticket,
+                            owner,
+                        )
+                    )
+
+                    if resultado_owner:
+
+                        owners_processados.append(
+                            resultado_owner
+                        )
+
+                        print(
+                            f"Owner processado: "
+                            f"Ticket "
+                            f"{numero_ticket} "
+                            f"| Owner: {owner} "
+                            f"| Status: "
+                            f"{resultado_owner['status']} "
+                            f"| Tipo: "
+                            f"{resultado_owner['tipo_atribuicao']}"
+                        )
 
             print(
-                f"Tickets recebidos: {tickets}"
+                f"Tickets recebidos: "
+                f"{tickets}"
             )
 
             print(
-                f"Tickets novos: {novos}"
+                f"Tickets novos: "
+                f"{novos}"
             )
 
             print(
-                f"Tickets já conhecidos: {existentes}"
+                f"Tickets já conhecidos: "
+                f"{existentes}"
+            )
+
+            print(
+                f"Owners processados: "
+                f"{owners_processados}"
             )
 
             self.enviar_json({
                 "sucesso": True,
-                "novos": novos,
-                "existentes": existentes,
+
+                "novos":
+                    novos,
+
+                "existentes":
+                    existentes,
+
+                "owners_processados":
+                    owners_processados,
             })
 
         except Exception as erro:
+
             print(
-                f"Erro ao processar tickets: {erro}"
+                "Erro ao processar tickets: "
+                f"{erro}"
             )
 
             self.enviar_json(
@@ -135,20 +295,93 @@ class ServidorFilaME(BaseHTTPRequestHandler):
                 400,
             )
 
-    def log_message(self, formato, *args):
+    def processar_owner(self):
+
+        try:
+
+            payload = self.ler_json()
+
+            ticket_id = payload.get(
+                "ticket_id"
+            )
+
+            owner = payload.get(
+                "owner"
+            )
+
+            if not ticket_id:
+
+                raise ValueError(
+                    "TicketID não informado."
+                )
+
+            ticket_id = int(
+                ticket_id
+            )
+
+            resultado = (
+                atualizar_atribuicao_owner(
+                    ticket_id,
+                    owner,
+                )
+            )
+
+            print(
+                f"Owner recebido: "
+                f"Ticket {ticket_id} "
+                f"| Owner: {owner}"
+            )
+
+            self.enviar_json({
+                "sucesso": True,
+
+                "ticket_id":
+                    ticket_id,
+
+                "owner":
+                    owner,
+
+                "atribuicao":
+                    resultado,
+            })
+
+        except Exception as erro:
+
+            print(
+                "Erro ao processar Owner: "
+                f"{erro}"
+            )
+
+            self.enviar_json(
+                {
+                    "sucesso": False,
+                    "erro": str(erro),
+                },
+                400,
+            )
+
+    def log_message(
+        self,
+        formato,
+        *args,
+    ):
         pass
 
 
 def iniciar_servidor():
+
     criar_tabelas()
 
     servidor = ThreadingHTTPServer(
-        (HOST, PORTA),
+        (
+            HOST,
+            PORTA,
+        ),
         ServidorFilaME,
     )
 
     print(
-        f"Fila ME aguardando tickets em "
+        "Fila ME aguardando tickets em "
         f"http://{HOST}:{PORTA}"
     )
 
@@ -156,4 +389,5 @@ def iniciar_servidor():
 
 
 if __name__ == "__main__":
+
     iniciar_servidor()
