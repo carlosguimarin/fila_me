@@ -1,188 +1,282 @@
 import tkinter as tk
 
-from src.fila_me.config.settings import (
-    NOME_APLICACAO,
-    LARGURA_JANELA,
-    ALTURA_JANELA,
-)
-
-from src.fila_me.models.fila import Fila
-
-from src.fila_me.ui.estilos import (
-    COR_FUNDO,
-    COR_PAINEL,
-    COR_TEXTO,
-    COR_SECUNDARIO,
-    COR_DESTAQUE,
-    COR_DESTAQUE_HOVER,
-    COR_BOTAO,
-    FONTE_PADRAO,
+from src.fila_me.database.banco import (
+    atualizar_status_trabalhando,
+    buscar_ultimas_atribuicoes,
+    buscar_proximo_tecnico,
 )
 
 
 class JanelaPrincipal:
-    def __init__(self, root, fila):
+
+    def __init__(
+        self,
+        root,
+        usuario,
+        ao_sair,
+    ):
         self.root = root
-        self.fila = fila
-        self.fixado = True
+        self.usuario = usuario
+        self.ao_sair = ao_sair
 
-        self.configurar_janela()
-        self.criar_interface()
+        self.sempre_no_topo = False
 
-    def configurar_janela(self):
-        self.root.title(NOME_APLICACAO)
-
-        self.root.geometry(
-            f"{LARGURA_JANELA}x{ALTURA_JANELA}"
+        self.frame = tk.Frame(
+            root,
+            bg="#202124",
         )
 
-        self.root.resizable(False, False)
-        self.root.configure(bg=COR_FUNDO)
+        self.frame.pack(
+            fill="both",
+            expand=True,
+        )
 
-        # Mantém a janela sempre sobre as outras.
-        self.root.attributes("-topmost", True)
+        if self.usuario["cargo"] == "tecnico":
+            atualizar_status_trabalhando(
+                self.usuario["id"],
+                True,
+            )
+
+        self.criar_interface()
+        self.atualizar_estado()
 
     def criar_interface(self):
 
-        # -------------------------
-        # TÍTULO
-        # -------------------------
-
-        titulo = tk.Label(
-            self.root,
-            text="FILA N1",
-            bg=COR_FUNDO,
-            fg=COR_SECUNDARIO,
-            font=(FONTE_PADRAO, 11, "bold"),
+        cabecalho = tk.Frame(
+            self.frame,
+            bg="#202124",
         )
 
-        titulo.pack(pady=(16, 2))
-
-        # -------------------------
-        # SUBTÍTULO
-        # -------------------------
-
-        subtitulo = tk.Label(
-            self.root,
-            text="É a vez de",
-            bg=COR_FUNDO,
-            fg=COR_SECUNDARIO,
-            font=(FONTE_PADRAO, 9),
+        cabecalho.pack(
+            fill="x",
+            padx=20,
+            pady=15,
         )
 
-        subtitulo.pack()
-
-        # -------------------------
-        # NOME
-        # -------------------------
-
-        self.nome_label = tk.Label(
-            self.root,
-            text=self.fila.tecnico_atual,
-            bg=COR_FUNDO,
-            fg=COR_TEXTO,
-            font=(FONTE_PADRAO, 27, "bold"),
+        informacoes = tk.Frame(
+            cabecalho,
+            bg="#202124",
         )
 
-        self.nome_label.pack(pady=(0, 8))
-
-        # -------------------------
-        # BOTÕES
-        # -------------------------
-
-        frame_botoes = tk.Frame(
-            self.root,
-            bg=COR_FUNDO,
-        )
-
-        frame_botoes.pack()
-
-        self.btn_anterior = tk.Button(
-            frame_botoes,
-            text="‹  Anterior",
-            command=self.anterior,
-            width=12,
-            bg=COR_BOTAO,
-            fg=COR_TEXTO,
-            activebackground="#45474C",
-            activeforeground=COR_TEXTO,
-            relief="flat",
-            bd=0,
-            font=(FONTE_PADRAO, 9, "bold"),
-            cursor="hand2",
-        )
-
-        self.btn_anterior.pack(
+        informacoes.pack(
             side="left",
-            padx=4,
         )
 
-        self.btn_proximo = tk.Button(
-            frame_botoes,
-            text="Próximo  ›",
-            command=self.proximo,
-            width=12,
-            bg=COR_DESTAQUE,
-            fg="white",
-            activebackground=COR_DESTAQUE_HOVER,
-            activeforeground="white",
+        tk.Label(
+            informacoes,
+            text=self.usuario["nome"].split()[0],
+            bg="#202124",
+            fg="#F1F3F4",
+            font=("Segoe UI", 12, "bold"),
+        ).pack(
+            anchor="w",
+        )
+
+        cargo = (
+            "Técnico"
+            if self.usuario["cargo"] == "tecnico"
+            else "Supervisão"
+        )
+
+        tk.Label(
+            informacoes,
+            text=cargo,
+            bg="#202124",
+            fg="#AEB4BD",
+            font=("Segoe UI", 9),
+        ).pack(
+            anchor="w",
+        )
+
+        botoes = tk.Frame(
+            cabecalho,
+            bg="#202124",
+        )
+
+        botoes.pack(
+            side="right",
+        )
+
+        self.botao_topo = tk.Button(
+            botoes,
+            text="📌 Fixar",
+            command=self.alternar_sempre_no_topo,
+            bg="#34363A",
+            fg="#F1F3F4",
+            activebackground="#45474B",
+            activeforeground="#FFFFFF",
             relief="flat",
-            bd=0,
-            font=(FONTE_PADRAO, 9, "bold"),
-            cursor="hand2",
+            padx=12,
+            pady=6,
         )
 
-        self.btn_proximo.pack(
+        self.botao_topo.pack(
             side="left",
-            padx=4,
+            padx=(0, 8),
         )
 
-        # -------------------------
-        # BOTÃO FIXAR
-        # -------------------------
-
-        self.btn_fixar = tk.Button(
-            self.root,
-            text="📌  Fixado no topo",
-            command=self.alternar_fixacao,
-            bg=COR_FUNDO,
-            fg=COR_SECUNDARIO,
-            activebackground=COR_FUNDO,
-            activeforeground=COR_TEXTO,
+        tk.Button(
+            botoes,
+            text="Sair",
+            command=self.sair,
+            bg="#34363A",
+            fg="#F1F3F4",
+            activebackground="#45474B",
+            activeforeground="#FFFFFF",
             relief="flat",
-            bd=0,
-            font=(FONTE_PADRAO, 8),
-            cursor="hand2",
+            padx=15,
+            pady=6,
+        ).pack(
+            side="left",
         )
 
-        self.btn_fixar.pack(pady=(9, 0))
-
-    def atualizar_nome(self):
-        self.nome_label.config(
-            text=self.fila.tecnico_atual
+        tk.Label(
+            self.frame,
+            text="Fila ME",
+            bg="#202124",
+            fg="#F1F3F4",
+            font=("Segoe UI", 20, "bold"),
+        ).pack(
+            pady=(10, 5),
         )
 
-    def proximo(self):
-        self.fila.proximo()
-        self.atualizar_nome()
+        self.label_proximo = tk.Label(
+            self.frame,
+            text="Próximo: carregando...",
+            bg="#202124",
+            fg="#4F8CFF",
+            font=("Segoe UI", 13, "bold"),
+        )
 
-    def anterior(self):
-        self.fila.anterior()
-        self.atualizar_nome()
+        self.label_proximo.pack(
+            pady=10,
+        )
 
-    def alternar_fixacao(self):
-        self.fixado = not self.fixado
+        tk.Label(
+            self.frame,
+            text="Últimas atribuições",
+            bg="#202124",
+            fg="#F1F3F4",
+            font=("Segoe UI", 11, "bold"),
+        ).pack(
+            pady=(15, 5),
+        )
+
+        self.lista = tk.Frame(
+            self.frame,
+            bg="#292A2D",
+        )
+
+        self.lista.pack(
+            fill="both",
+            expand=True,
+            padx=20,
+            pady=(0, 20),
+        )
+
+    def alternar_sempre_no_topo(self):
+
+        self.sempre_no_topo = (
+            not self.sempre_no_topo
+        )
 
         self.root.attributes(
             "-topmost",
-            self.fixado,
+            self.sempre_no_topo,
         )
 
-        if self.fixado:
-            self.btn_fixar.config(
-                text="📌  Fixado no topo"
+        if self.sempre_no_topo:
+
+            self.botao_topo.config(
+                text="📌 Fixado",
+                bg="#4F8CFF",
             )
+
         else:
-            self.btn_fixar.config(
-                text="📍  Fixar no topo"
+
+            self.botao_topo.config(
+                text="📌 Fixar",
+                bg="#34363A",
             )
+
+    def atualizar_estado(self):
+
+        try:
+
+            proximo = buscar_proximo_tecnico()
+
+            self.label_proximo.config(
+                text=f"Próximo: {proximo.split()[0]}"
+            )
+
+            self.atualizar_historico()
+
+        except Exception as erro:
+
+            self.label_proximo.config(
+                text=f"Erro: {erro}"
+            )
+
+        self.root.after(
+            5000,
+            self.atualizar_estado,
+        )
+
+    def atualizar_historico(self):
+
+        for widget in self.lista.winfo_children():
+            widget.destroy()
+
+        atribuicoes = buscar_ultimas_atribuicoes(9)
+
+        for (
+            numero_ticket,
+            tecnico,
+            atribuido_em,
+        ) in atribuicoes:
+
+            tecnico = (
+                tecnico
+                if tecnico
+                else "Aguardando técnico"
+            )
+
+            texto = (
+                f"#{numero_ticket}  →  "
+                f"{tecnico}"
+            )
+
+            tk.Label(
+                self.lista,
+                text=texto,
+                bg="#292A2D",
+                fg="#F1F3F4",
+                font=("Segoe UI", 10),
+                anchor="w",
+            ).pack(
+                fill="x",
+                padx=15,
+                pady=5,
+            )
+
+    def sair(self):
+
+        self.encerrar()
+
+        self.ao_sair()
+
+    def encerrar(self):
+
+        self.root.attributes(
+            "-topmost",
+            False,
+        )
+
+        if self.usuario["cargo"] == "tecnico":
+
+            atualizar_status_trabalhando(
+                self.usuario["id"],
+                False,
+            )
+
+        self.frame.destroy()
