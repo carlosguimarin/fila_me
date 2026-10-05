@@ -19,6 +19,8 @@ class JanelaPrincipal:
         self.usuario = usuario
         self.ao_sair = ao_sair
 
+        self.sempre_no_topo = False
+
         self.frame = tk.Frame(
             root,
             bg="#202124",
@@ -86,8 +88,35 @@ class JanelaPrincipal:
             anchor="w",
         )
 
-        tk.Button(
+        botoes = tk.Frame(
             cabecalho,
+            bg="#202124",
+        )
+
+        botoes.pack(
+            side="right",
+        )
+
+        self.botao_topo = tk.Button(
+            botoes,
+            text="📌 Fixar",
+            command=self.alternar_sempre_no_topo,
+            bg="#34363A",
+            fg="#F1F3F4",
+            activebackground="#45474B",
+            activeforeground="#FFFFFF",
+            relief="flat",
+            padx=12,
+            pady=6,
+        )
+
+        self.botao_topo.pack(
+            side="left",
+            padx=(0, 8),
+        )
+
+        tk.Button(
+            botoes,
             text="Sair",
             command=self.sair,
             bg="#34363A",
@@ -98,7 +127,7 @@ class JanelaPrincipal:
             padx=15,
             pady=6,
         ).pack(
-            side="right",
+            side="left",
         )
 
         tk.Label(
@@ -144,6 +173,31 @@ class JanelaPrincipal:
             padx=20,
             pady=(0, 20),
         )
+
+    def alternar_sempre_no_topo(self):
+
+        self.sempre_no_topo = (
+            not self.sempre_no_topo
+        )
+
+        self.root.attributes(
+            "-topmost",
+            self.sempre_no_topo,
+        )
+
+        if self.sempre_no_topo:
+
+            self.botao_topo.config(
+                text="📌 Fixado",
+                bg="#4F8CFF",
+            )
+
+        else:
+
+            self.botao_topo.config(
+                text="📌 Fixar",
+                bg="#34363A",
+            )
 
     def atualizar_estado(self):
 
@@ -212,6 +266,11 @@ class JanelaPrincipal:
         self.ao_sair()
 
     def encerrar(self):
+
+        self.root.attributes(
+            "-topmost",
+            False,
+        )
 
         if self.usuario["cargo"] == "tecnico":
 

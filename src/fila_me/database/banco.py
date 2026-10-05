@@ -379,7 +379,13 @@ def buscar_ultimas_atribuicoes(limite=9):
                 """
                 SELECT
                     numero_ticket,
-                    tecnico,
+                    CASE
+                        WHEN tipo_atribuicao = 'SUPERVISAO'
+                            THEN 'Supervisão'
+                        WHEN tecnico IS NULL
+                            THEN 'Aguardando técnico'
+                        ELSE tecnico
+                    END AS tecnico,
                     atribuido_em
                 FROM atribuicoes
                 ORDER BY id DESC
