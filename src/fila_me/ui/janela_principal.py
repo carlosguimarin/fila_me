@@ -1,6 +1,7 @@
 import tkinter as tk
 
 from src.fila_me.database.banco import (
+    atualizar_heartbeat,
     atualizar_status_trabalhando,
     buscar_ultimas_atribuicoes,
     buscar_proximo_tecnico,
@@ -20,6 +21,11 @@ class JanelaPrincipal:
         self.ao_sair = ao_sair
 
         self.sempre_no_topo = False
+        self.heartbeat_id = None
+        self.encerrando = False
+
+        self.root.geometry("365x410")
+        self.root.resizable(False, False)
 
         self.frame = tk.Frame(
             root,
@@ -37,6 +43,8 @@ class JanelaPrincipal:
                 True,
             )
 
+            self.enviar_heartbeat()
+
         self.criar_interface()
         self.atualizar_estado()
 
@@ -45,13 +53,16 @@ class JanelaPrincipal:
         cabecalho = tk.Frame(
             self.frame,
             bg="#202124",
+            height=48,
         )
 
         cabecalho.pack(
             fill="x",
-            padx=20,
-            pady=15,
+            padx=18,
+            pady=(8, 1),
         )
+
+        cabecalho.pack_propagate(False)
 
         informacoes = tk.Frame(
             cabecalho,
@@ -88,6 +99,24 @@ class JanelaPrincipal:
             anchor="w",
         )
 
+        titulo = tk.Label(
+            cabecalho,
+            text="Fila ME",
+            bg="#202124",
+            fg="#F1F3F4",
+            font=("Segoe UI", 17, "bold"),
+            bd=0,
+            highlightthickness=0,
+            padx=0,
+            pady=0,
+        )
+
+        titulo.place(
+            relx=0.5,
+            y=3,
+            anchor="n",
+        )
+
         botoes = tk.Frame(
             cabecalho,
             bg="#202124",
@@ -99,20 +128,24 @@ class JanelaPrincipal:
 
         self.botao_topo = tk.Button(
             botoes,
-            text="📌 Fixar",
+            text="📌︎",
             command=self.alternar_sempre_no_topo,
-            bg="#34363A",
-            fg="#F1F3F4",
-            activebackground="#45474B",
-            activeforeground="#FFFFFF",
+            bg="#202124",
+            fg="#AEB4BD",
+            activebackground="#202124",
+            activeforeground="#FF4D4D",
             relief="flat",
-            padx=12,
-            pady=6,
+            bd=0,
+            highlightthickness=0,
+            font=("Segoe UI Symbol", 11),
+            padx=2,
+            pady=2,
+            cursor="hand2",
         )
 
         self.botao_topo.pack(
             side="left",
-            padx=(0, 8),
+            padx=(0, 6),
         )
 
         tk.Button(
@@ -124,20 +157,12 @@ class JanelaPrincipal:
             activebackground="#45474B",
             activeforeground="#FFFFFF",
             relief="flat",
-            padx=15,
-            pady=6,
+            bd=0,
+            padx=12,
+            pady=5,
+            cursor="hand2",
         ).pack(
             side="left",
-        )
-
-        tk.Label(
-            self.frame,
-            text="Fila ME",
-            bg="#202124",
-            fg="#F1F3F4",
-            font=("Segoe UI", 20, "bold"),
-        ).pack(
-            pady=(10, 5),
         )
 
         self.label_proximo = tk.Label(
@@ -145,11 +170,11 @@ class JanelaPrincipal:
             text="Próximo: carregando...",
             bg="#202124",
             fg="#4F8CFF",
-            font=("Segoe UI", 13, "bold"),
+            font=("Segoe UI", 17, "bold"),
         )
 
         self.label_proximo.pack(
-            pady=10,
+            pady=(3, 4),
         )
 
         tk.Label(
@@ -159,7 +184,7 @@ class JanelaPrincipal:
             fg="#F1F3F4",
             font=("Segoe UI", 11, "bold"),
         ).pack(
-            pady=(15, 5),
+            pady=(2, 4),
         )
 
         self.lista = tk.Frame(
@@ -170,8 +195,8 @@ class JanelaPrincipal:
         self.lista.pack(
             fill="both",
             expand=True,
-            padx=20,
-            pady=(0, 20),
+            padx=12,
+            pady=(0, 8),
         )
 
     def alternar_sempre_no_topo(self):
@@ -188,18 +213,44 @@ class JanelaPrincipal:
         if self.sempre_no_topo:
 
             self.botao_topo.config(
-                text="📌 Fixado",
-                bg="#4F8CFF",
+                fg="#FF4D4D",
             )
 
         else:
 
             self.botao_topo.config(
-                text="📌 Fixar",
-                bg="#34363A",
+                fg="#AEB4BD",
             )
 
+    def enviar_heartbeat(self):
+
+        if self.encerrando:
+            return
+
+        if self.usuario["cargo"] != "tecnico":
+            return
+
+        try:
+
+            atualizar_heartbeat(
+                self.usuario["id"],
+            )
+
+        except Exception as erro:
+
+            print(
+                f"Erro ao enviar heartbeat: {erro}"
+            )
+
+        self.heartbeat_id = self.root.after(
+            5000,
+            self.enviar_heartbeat,
+        )
+
     def atualizar_estado(self):
+
+        if self.encerrando:
+            return
 
         try:
 
@@ -217,10 +268,12 @@ class JanelaPrincipal:
                 text=f"Erro: {erro}"
             )
 
-        self.root.after(
-            5000,
-            self.atualizar_estado,
-        )
+        if not self.encerrando:
+
+            self.root.after(
+                5000,
+                self.atualizar_estado,
+            )
 
     def atualizar_historico(self):
 
@@ -246,17 +299,42 @@ class JanelaPrincipal:
                 f"{tecnico}"
             )
 
-            tk.Label(
+            if (
+                self.usuario["cargo"] == "tecnico"
+                and tecnico.lower() == self.usuario["nome"].lower()
+            ):
+                cor_texto = "#FF5C5C"
+
+            else:
+                cor_texto = "#F1F3F4"
+
+            campo = tk.Entry(
                 self.lista,
-                text=texto,
                 bg="#292A2D",
-                fg="#F1F3F4",
+                fg=cor_texto,
+                readonlybackground="#292A2D",
+                selectbackground="#4F8CFF",
+                selectforeground="#FFFFFF",
+                relief="flat",
+                bd=0,
+                highlightthickness=0,
                 font=("Segoe UI", 10),
-                anchor="w",
-            ).pack(
+                cursor="arrow",
+            )
+
+            campo.insert(
+                0,
+                texto,
+            )
+
+            campo.config(
+                state="readonly",
+            )
+
+            campo.pack(
                 fill="x",
-                padx=15,
-                pady=5,
+                padx=10,
+                pady=3,
             )
 
     def sair(self):
@@ -266,6 +344,23 @@ class JanelaPrincipal:
         self.ao_sair()
 
     def encerrar(self):
+
+        if self.encerrando:
+            return
+
+        self.encerrando = True
+
+        if self.heartbeat_id is not None:
+
+            try:
+                self.root.after_cancel(
+                    self.heartbeat_id
+                )
+
+            except Exception:
+                pass
+
+            self.heartbeat_id = None
 
         self.root.attributes(
             "-topmost",

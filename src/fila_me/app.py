@@ -26,12 +26,12 @@ class Aplicacao:
         )
 
         self.root.geometry(
-            "420x500"
+            "365x410"
         )
 
         self.root.minsize(
-            420,
-            500,
+            365,
+            410,
         )
 
         self.usuario = None
