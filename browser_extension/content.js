@@ -12,9 +12,7 @@ function encontrarOwnerDaLinha(linha) {
         celulas[celulas.length - 1];
 
     const elementoOwner =
-        ultimaCelula.querySelector(
-            "[title]"
-        );
+        ultimaCelula.querySelector("[title]");
 
     if (!elementoOwner) {
         return null;
@@ -29,10 +27,38 @@ function encontrarOwnerDaLinha(linha) {
 }
 
 
-function encontrarTicketsPagina() {
+function encontrarWidgetPorTitulo(titulo) {
+
+    const widgets = [
+        ...document.querySelectorAll(
+            ".WidgetSimple.CanDrag"
+        )
+    ];
+
+    return widgets.find(widget => {
+
+        const cabecalho =
+            widget.querySelector(".Header");
+
+        if (!cabecalho) {
+            return false;
+        }
+
+        return (
+            cabecalho.innerText.trim() === titulo
+        );
+    }) || null;
+}
+
+
+function encontrarTicketsNoWidget(widget) {
+
+    if (!widget) {
+        return [];
+    }
 
     const links = [
-        ...document.querySelectorAll(
+        ...widget.querySelectorAll(
             'a[href*="Action=AgentTicketZoom"]'
         )
     ];
@@ -67,9 +93,7 @@ function encontrarTicketsPagina() {
         }
 
         const owner =
-            encontrarOwnerDaLinha(
-                linha
-            );
+            encontrarOwnerDaLinha(linha);
 
         tickets.push({
             numero: numero,
@@ -81,29 +105,88 @@ function encontrarTicketsPagina() {
 }
 
 
-function enviarTickets() {
+function enviarTicketsNovos(tickets) {
 
-    const tickets =
-        encontrarTicketsPagina();
+    if (tickets.length === 0) {
+        return;
+    }
 
     console.log(
-        "Fila ME - tickets encontrados:",
+        "Fila ME - Chamados Novos:",
         tickets
     );
 
     chrome.runtime.sendMessage({
-        tipo:
-            "tickets_otrs",
-
-        tickets:
-            tickets
+        tipo: "tickets_otrs",
+        tickets: tickets
     });
+}
+
+
+function enviarOwnersChamadosAbertos(tickets) {
+
+    for (const ticket of tickets) {
+
+        if (!ticket.owner) {
+            continue;
+        }
+
+        console.log(
+            "Fila ME - Chamado Aberto para conferência:",
+            ticket
+        );
+
+        chrome.runtime.sendMessage({
+            tipo: "owner_otrs",
+            ticket_id: ticket.numero,
+            owner: ticket.owner
+        });
+    }
 }
 
 
 function executarLeitura() {
 
-    enviarTickets();
+    const widgetChamadosNovos =
+        encontrarWidgetPorTitulo(
+            "Chamados Novos"
+        );
+
+    const widgetChamadosAbertos =
+        encontrarWidgetPorTitulo(
+            "Chamados Abertos"
+        );
+
+
+    const ticketsNovos =
+        encontrarTicketsNoWidget(
+            widgetChamadosNovos
+        );
+
+    const ticketsAbertos =
+        encontrarTicketsNoWidget(
+            widgetChamadosAbertos
+        );
+
+
+    console.log(
+        "Fila ME - Chamados Novos encontrados:",
+        ticketsNovos
+    );
+
+    console.log(
+        "Fila ME - Chamados Abertos encontrados:",
+        ticketsAbertos
+    );
+
+
+    enviarTicketsNovos(
+        ticketsNovos
+    );
+
+    enviarOwnersChamadosAbertos(
+        ticketsAbertos
+    );
 }
 
 

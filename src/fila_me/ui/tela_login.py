@@ -112,6 +112,11 @@ class TelaLogin:
             ipady=6,
         )
 
+        self.email_entry.bind(
+            "<Return>",
+            self.ir_para_senha,
+        )
+
         tk.Label(
             self.root,
             text="Senha",
@@ -138,6 +143,11 @@ class TelaLogin:
             fill="x",
             padx=45,
             ipady=6,
+        )
+
+        self.senha_entry.bind(
+            "<Return>",
+            self.entrar_com_enter,
         )
 
         botao = tk.Button(
@@ -183,6 +193,18 @@ class TelaLogin:
         cadastro.pack()
 
         self.email_entry.focus_set()
+
+    def ir_para_senha(self, evento=None):
+
+        self.senha_entry.focus_set()
+
+        return "break"
+
+    def entrar_com_enter(self, evento=None):
+
+        self.entrar()
+
+        return "break"
 
     def entrar(self):
 
