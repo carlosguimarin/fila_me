@@ -171,6 +171,7 @@ def buscar_tecnicos_trabalhando():
                 WHERE cargo = 'tecnico'
                   AND ativo = TRUE
                   AND trabalhando = TRUE
+                  AND ultimo_heartbeat >= CURRENT_TIMESTAMP - INTERVAL '15 seconds'
                 ORDER BY id;
                 """
             )
@@ -207,6 +208,7 @@ def registrar_ticket_e_atribuir(numero_ticket):
                 WHERE cargo = 'tecnico'
                   AND ativo = TRUE
                   AND trabalhando = TRUE
+                  AND ultimo_heartbeat >= CURRENT_TIMESTAMP - INTERVAL '15 seconds'
                 ORDER BY id;
                 """
             )
@@ -543,7 +545,11 @@ def atualizar_atribuicao_owner(
                     id,
                     nome,
                     cargo,
+                    COALESCE(
                     trabalhando
+                    AND ultimo_heartbeat >= CURRENT_TIMESTAMP - INTERVAL '15 seconds',
+                    FALSE
+                ) AS trabalhando
                 FROM usuarios
                 WHERE LOWER(nome) = LOWER(%s)
                   AND ativo = TRUE
@@ -700,6 +706,7 @@ def atualizar_atribuicao_owner(
                     WHERE cargo = 'tecnico'
                       AND ativo = TRUE
                       AND trabalhando = TRUE
+                      AND ultimo_heartbeat >= CURRENT_TIMESTAMP - INTERVAL '15 seconds'
                     ORDER BY id;
                     """
                 )
