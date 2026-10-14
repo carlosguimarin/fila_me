@@ -228,3 +228,12 @@ Não considerar a mudança validada em produção apenas pela conferência de si
 ## 11. Owner OTRS incorreto
 
 Valores como `bloqueado`, `desbloqueado`, categorias e títulos de chamados foram observados em `owner_otrs`. Esse campo não é evidência suficiente para concluir quem bloqueou/assumiu o ticket. Conferir no OTRS antes de corrigir dados em massa. Revisar a extração contra o DOM real antes de alterar a extensão.
+
+## 12. Integração visual V2 na branch `luis` — 2026-10-14
+
+- Testes isolados de `buscar_painel_visual()` e encerramento da janela: passaram com `python -m unittest tests.test_integracao_v2 -v`, usando mocks, sem acesso ao Neon.
+- Execução manual relatada por Luís: a aplicação abriu, o servidor local iniciou em `127.0.0.1:8765` e recebeu polls da extensão. O ticket mostrado no log já existia (`Tickets novos: []`); esse teste não comprova atribuição de ticket novo nem o ciclo completo de presença/Owner.
+- Compilação de sintaxe de `src/fila_me`: passou com `compileall`.
+- Revisão estática: servidor local, extensão OTRS, schema e rotinas de atribuição/Owner não foram copiados do ZIP V2.
+- Pendente: abrir a nova UI com as dependências instaladas, testar login/cadastro, tema, menus, histórico, presença, encerramento, Neon/OTRS e build do executável no ambiente operacional.
+- Diferença identificada: a V1 altera `atribuicoes.tecnico` quando outro técnico assume, enquanto a documentação o descreve como atribuição provisória separada do Owner. Por decisão do responsável, o comportamento funcional da V1 foi mantido nesta integração visual.

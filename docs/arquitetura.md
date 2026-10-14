@@ -163,3 +163,7 @@ Ela NÃO deve decidir:
 - como corrigir a fila.
 
 Essas regras pertencem à aplicação/banco.
+
+## 10. Apresentação V2 sobre serviços V1
+
+A interface Tkinter utiliza componentes, temas, ícones e preferências locais da V2. `buscar_painel_visual()` em `database/banco.py` consulta as últimas nove atribuições, o próximo técnico e os técnicos elegíveis para apresentar o painel. Essa função não escreve no banco e não seleciona nem avança a fila. Login e cadastro continuam usando `database/autenticacao.py`; a presença técnica continua usando `atualizar_status_trabalhando()` e `atualizar_heartbeat()` com intervalo de 5 segundos. O servidor local e a extensão permanecem os da V1.

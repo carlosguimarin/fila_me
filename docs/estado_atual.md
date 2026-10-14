@@ -110,3 +110,13 @@ A sintaxe do fluxo recente de reavaliação foi conferida, mas sua operação co
 ## 6. Integração da V2 de interface
 
 Antes de integrar uma mudança grande de UI, seguir `integracao_v2.md`. A UI pode mudar de organização e aparência, mas deve preservar os contratos de banco, fila, presença, Owner, Supervisão, servidor local e encerramento descritos nos documentos de regras e arquitetura.
+
+### Integração visual na branch `luis` (2026-10-14)
+
+A interface Tkinter da V2 foi adaptada para a V1: temas claro/escuro, modo simples/avançado, cores, filtro visual, lista rolável, indicador de técnicos elegíveis, menus e ícones locais. As preferências são locais por usuário. A tela usa `buscar_painel_visual()` apenas para leitura e mantém login/cadastro da V1 por e-mail, assim como o heartbeat técnico de 5 segundos, a validade de 15 segundos e a limpeza no encerramento.
+
+Não foram integrados o identificador OTRS, as sessões/heartbeat de 90 segundos, alterações de schema, a leitura de Owner da extensão V2 nem o servidor V2. O painel não exibe ícones de bloqueio ou links observados, pois esses dados dependem da extensão e do servidor V2. A lista online mostra técnicos elegíveis da V1; a V1 não rastreia presença de Supervisão.
+
+O código V1 de `atualizar_atribuicao_owner()` atualmente substitui `atribuicoes.tecnico` pelo nome de outro técnico que assume o chamado. Isso difere da descrição documental de `tecnico` como atribuição provisória permanente. Por decisão do responsável, a integração visual mantém o comportamento funcional da V1; a tela evita rotular esse valor como “inicial”. Uma eventual mudança nessa persistência exigiria análise própria de regra e migração, fora da integração visual.
+
+O executável ainda precisa ser reconstruído e validado com Neon/OTRS no ambiente operacional. O `FilaME.spec` foi adaptado para incluir os ícones no bundle; `.env` continua externo ao ZIP.

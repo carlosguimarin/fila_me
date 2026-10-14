@@ -7,6 +7,7 @@ from src.fila_me.integracao.servidor_local import (
 from src.fila_me.ui.janela_principal import (
     JanelaPrincipal,
 )
+from src.fila_me.ui.componentes import ExecutorUI
 from src.fila_me.ui.tela_cadastro import (
     TelaCadastro,
 )
@@ -36,6 +37,8 @@ class Aplicacao:
 
         self.usuario = None
         self.janela_principal = None
+        self.tela = None
+        self.executor = ExecutorUI(self.root)
 
         self.iniciar_servidor()
 
@@ -56,7 +59,9 @@ class Aplicacao:
         thread.start()
 
     def limpar_tela(self):
-
+        if self.tela is not None:
+            self.tela.encerrar()
+            self.tela = None
         for widget in self.root.winfo_children():
             widget.destroy()
 
@@ -64,19 +69,21 @@ class Aplicacao:
 
         self.limpar_tela()
 
-        TelaLogin(
+        self.tela = TelaLogin(
             self.root,
             ao_logar=self.entrar,
             ao_cadastrar=self.mostrar_cadastro,
+            executor=self.executor,
         )
 
     def mostrar_cadastro(self):
 
         self.limpar_tela()
 
-        TelaCadastro(
+        self.tela = TelaCadastro(
             self.root,
             ao_voltar=self.mostrar_login,
+            executor=self.executor,
         )
 
     def entrar(self, usuario):
@@ -90,8 +97,10 @@ class Aplicacao:
                 self.root,
                 usuario,
                 ao_sair=self.sair,
+                executor=self.executor,
             )
         )
+        self.tela = self.janela_principal
 
     def sair(self):
 
@@ -104,10 +113,8 @@ class Aplicacao:
         self.mostrar_login()
 
     def fechar(self):
-
-        if self.janela_principal:
-            self.janela_principal.encerrar()
-
+        self.limpar_tela()
+        self.executor.encerrar()
         self.root.destroy()
 
 

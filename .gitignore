@@ -7,5 +7,6 @@ venv/
 build/
 dist/
 *.spec
+!FilaME.spec
 *.exe
 *.zip

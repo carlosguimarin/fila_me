@@ -478,6 +478,57 @@ def buscar_ultimas_atribuicoes(limite=9):
             )
             return cursor.fetchall()
 
+
+def buscar_painel_visual(usuario, filtro="todos"):
+    """Dados de apresentação; a decisão da fila permanece nas funções existentes."""
+    if filtro not in ("todos", "meus"):
+        raise ValueError("Filtro inválido")
+    with conectar() as conn:
+        with conn.cursor() as cursor:
+            if filtro == "meus":
+                cursor.execute(
+                    """
+                    SELECT numero_ticket, tecnico, atribuido_em, status,
+                           owner_otrs, tipo_atribuicao
+                    FROM atribuicoes
+                    WHERE LOWER(tecnico) = LOWER(%s)
+                      AND tipo_atribuicao <> 'SUPERVISAO'
+                    ORDER BY id DESC
+                    LIMIT 9;
+                    """,
+                    (usuario["nome"],),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT numero_ticket, tecnico, atribuido_em, status,
+                           owner_otrs, tipo_atribuicao
+                    FROM atribuicoes
+                    ORDER BY id DESC
+                    LIMIT 9;
+                    """
+                )
+            linhas = cursor.fetchall()
+    historico = [
+        {
+            "numero_ticket": numero,
+            "tecnico": tecnico,
+            "atribuido_em": data,
+            "status": status,
+            "owner_otrs": owner,
+            "tipo_atribuicao": tipo,
+            "meu": tipo != "SUPERVISAO" and bool(tecnico)
+                   and tecnico.casefold() == usuario["nome"].casefold(),
+        }
+        for numero, tecnico, data, status, owner, tipo in linhas
+    ]
+    online = [
+        {"id": identificador, "nome": nome, "cargo": "tecnico", "trabalhando": True}
+        for identificador, nome in buscar_tecnicos_trabalhando()
+    ]
+    return {"proximo": buscar_proximo_tecnico(), "historico": historico, "online": online}
+
+
 def buscar_proximo_tecnico():
     tecnicos = buscar_tecnicos_trabalhando()
     if not tecnicos:
