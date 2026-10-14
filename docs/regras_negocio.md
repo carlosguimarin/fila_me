@@ -132,7 +132,7 @@ Se o Owner for um usuário registrado como supervisor:
 - não incluir supervisor na fila;
 - não alterar `fila_estado`.
 
-Na interface, o histórico deve mostrar:
+Na interface, o rótulo do histórico deve ser sempre `Supervisão`, mesmo que `owner_otrs` contenha o nome pessoal do supervisor. O nome real permanece armazenado no Owner para auditoria. O histórico mostra:
 
 ```text
 #12345 → Supervisão
@@ -148,14 +148,15 @@ Exemplo:
 Admin OTRS
 ```
 
-Se o nome não corresponder a usuário registrado:
+Se o nome não corresponder a um usuário ativo registrado:
 
-- salvar `owner_otrs`;
+- gravar e exibir exatamente `Admin OTRS` em `owner_otrs`;
+- substituir o nome desconhecido também nos dados enviados pela integração e nos logs;
 - não inventar cargo;
 - não assumir que é supervisor;
 - preservar a atribuição existente.
 
-O Owner desconhecido, por si só, não muda a fila. Se a atribuição ainda estiver `AGUARDANDO_TECNICO`, a rotina separada de reavaliação pode atribuir o ticket a um técnico elegível depois de registrar o Owner; essa atribuição, e não a identidade desconhecida do Owner, é que consome a vez.
+Owners desconhecidos antigos também são apresentados como `Admin OTRS`. O Owner desconhecido, por si só, não muda a fila. Se a atribuição ainda estiver `AGUARDANDO_TECNICO`, a rotina separada de reavaliação pode atribuir o ticket a um técnico elegível depois de registrar o Owner; essa atribuição, e não a identidade desconhecida do Owner, é que consome a vez.
 
 ## 11. Nenhum técnico trabalhando
 
@@ -189,7 +190,16 @@ Fechar a aplicação deve retirar o técnico da fila.
 Para a janela fixada:
 - o atributo `-topmost` deve ser desativado no encerramento.
 
-## 14. Exemplo completo
+## 14. Primeiro bloqueio observado
+
+- A extensão lê o valor da coluna `BLOQUEAR` separadamente do `PROPRIETÁRIO`.
+- O estado atual (`bloqueado`/`desbloqueado`) é salvo em `tickets.status_bloqueio`, nunca em `atribuicoes.owner_otrs`.
+- O primeiro valor explícito `bloqueado` marca o ticket como bloqueado confirmado e a interface usa verde na barra do chamado.
+- A confirmação histórica fica associada ao número único em `tickets` e não é removida por leituras futuras de `desbloqueado`; se o chamado voltar para a fila, continua verde. O estado atual continua sendo exibido separadamente.
+- Essa marca não identifica quem bloqueou e não altera Owner, atribuição ou posição da fila.
+- O registro só é feito para tickets que já existem no banco, sem reintroduzir tickets ausentes do OTRS.
+
+## 15. Exemplo completo
 
 Estado:
 

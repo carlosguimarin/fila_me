@@ -225,9 +225,11 @@ Esse fluxo foi revisado estaticamente, mas o ciclo operacional ainda precisa ser
 
 Não considerar a mudança validada em produção apenas pela conferência de sintaxe.
 
-## 11. Owner OTRS incorreto
+## 11. Owner e bloqueio OTRS — correção de código pendente de validação operacional
 
-Valores como `bloqueado`, `desbloqueado`, categorias e títulos de chamados foram observados em `owner_otrs`. Esse campo não é evidência suficiente para concluir quem bloqueou/assumiu o ticket. Conferir no OTRS antes de corrigir dados em massa. Revisar a extração contra o DOM real antes de alterar a extensão.
+Valores como `bloqueado`, `desbloqueado`, categorias e títulos de chamados foram observados em `owner_otrs` com a heurística antiga da última célula. A extensão foi alterada para extrair `PROPRIETÁRIO` e `BLOQUEAR` por cabeçalho e encaminhar o bloqueio separadamente. Validar a correspondência das colunas nos widgets `Chamados Novos` e `Chamados Abertos`; não corrigir registros antigos em massa nem inferir quem bloqueou pelo valor `bloqueado`.
+
+O primeiro bloqueio observado agora é persistido em `tickets.bloqueio_confirmado`, com timestamp `bloqueado_em`, e a barra do painel usa verde. Leituras de `desbloqueado` não removem a confirmação. O fluxo ainda precisa de validação operacional com a extensão atualizada e o servidor conectado ao Neon.
 
 ## 12. Integração visual V2 na branch `luis` — 2026-10-14
 

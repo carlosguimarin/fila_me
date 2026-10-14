@@ -141,9 +141,12 @@ fila_me/
 │           └── janela_principal.py
 └── extensão do OTRS
     ├── manifest.json
+    ├── icons/
     ├── content.js
     └── background.js
 ```
+
+A arte mestra da coruja fica em `src/fila_me/ui/assets/brand/owl.png`; `owl-app.png` e `owl.ico` são derivados para a janela e o executável. Os tamanhos `browser_extension/icons/owl-*.png` são declarados no manifesto da extensão. `scripts/build_brand_icons.py` recria esses derivados.
 
 A extensão do OTRS é tratada como parte do projeto, embora os arquivos dela possam estar em uma pasta de extensão separada da estrutura Python.
 
@@ -288,6 +291,8 @@ Exemplo visual:
 ```
 
 Quando o técnico visualizando a tela é o técnico da atribuição, o texto recebe destaque.
+
+Quando `tipo_atribuicao = 'SUPERVISAO'`, o texto do histórico é sempre `Supervisão`, mesmo que `owner_otrs` guarde o nome real do supervisor para auditoria.
 
 ### Atualização
 
@@ -571,13 +576,14 @@ Exemplo:
 Admin OTRS
 ```
 
-Se o Owner não corresponder a um usuário cadastrado:
+Se o Owner não corresponder a um usuário ativo cadastrado:
 
-- registrar `owner_otrs`;
+- gravar e exibir `owner_otrs` como exatamente `Admin OTRS`;
 - não inventar usuário;
-- não alterar a atribuição para um técnico inexistente.
+- não inferir cargo nem tratar como Supervisão;
+- preservar a atribuição existente e não alterar a fila por causa do Owner desconhecido.
 
-A informação deve permanecer para auditoria. Owner desconhecido não altera a fila por si só. Uma atribuição ainda em `AGUARDANDO_TECNICO` pode, separadamente, ser reavaliada para o próximo técnico elegível conforme a regra 4.11.
+Owners desconhecidos antigos também devem ser apresentados como `Admin OTRS`, sem expor o texto bruto vindo do DOM na resposta da integração. Uma atribuição ainda em `AGUARDANDO_TECNICO` pode, separadamente, ser reavaliada para o próximo técnico elegível conforme a regra 4.11.
 
 ---
 
@@ -730,8 +736,10 @@ com `/tickets`, `/owner` e `/estado`.
 - leitura de `Chamados Novos`;
 - leitura de `Chamados Abertos`;
 - extração de número do ticket;
-- tentativa de extração do Owner;
+- extração de `PROPRIETÁRIO` e `BLOQUEAR` pelas colunas da tabela;
 - envio para Python via `127.0.0.1:8765`.
+
+O estado atual (`bloqueado`/`desbloqueado`) é salvo em `tickets.status_bloqueio`, separado de `atribuicoes.owner_otrs`. O primeiro valor `bloqueado` também é salvo em `tickets.bloqueio_confirmado`, com horário em `bloqueado_em`; uma leitura posterior de `desbloqueado` atualiza o estado atual sem apagar a confirmação. O painel usa verde para a confirmação histórica. A marca não identifica quem bloqueou nem modifica atribuição ou fila.
 
 ## Build
 
@@ -843,11 +851,11 @@ O `.env` precisou ser copiado para `dist` porque o executável procura o arquivo
 
 # 8. PROBLEMAS / BUGS CONHECIDOS
 
-## 8.1 Owner do OTRS pode ser identificado incorretamente
+## 8.1 Extração de Owner e bloqueio no OTRS
 
-**BUG CONHECIDO / PENDENTE**
+**ALTERADO; VALIDAR NO OTRS**
 
-Houve um caso concreto:
+O caso que motivou a correção foi:
 
 ```text
 Ticket 4102
@@ -855,17 +863,7 @@ Owner real no OTRS: Luís
 owner_otrs registrado no banco: "bloqueado"
 ```
 
-A suspeita é a implementação atual:
-
-```javascript
-const elementoOwner = ultimaCelula.querySelector("[title]");
-```
-
-pode estar encontrando um elemento de status/bloqueio na última célula, e não necessariamente o elemento que representa o Owner.
-
-Isso ainda precisa ser investigado.
-
-**IMPORTANTE:** não substituir a lógica atual por outra sem primeiro analisar o DOM real do OTRS.
+O DOM observado mostrou que a coluna `BLOQUEAR` contém `title="bloqueado"`. A extensão foi alterada para localizar `PROPRIETÁRIO` e `BLOQUEAR` pelos cabeçalhos e enviá-los separadamente. Validar cabeçalhos e células nos widgets `Chamados Novos` e `Chamados Abertos` antes de distribuir.
 
 ---
 
@@ -893,9 +891,9 @@ A fonte correta é sempre o arquivo atual do repositório/arquivo fornecido pelo
 
 O código reavalia a atribuição existente quando o ticket volta a ser recebido por `/tickets` ou `/owner`, processando Owner primeiro. Validar com Neon/OTRS: ausência de técnicos, técnico elegível, Owner Supervisor, polling duplicado e concorrência de duas instâncias. Não varrer a tabela para reintroduzir fantasmas/ausentes do OTRS.
 
-## PENDENTE — Corrigir/levar a diagnóstico a leitura do Owner
+## PENDENTE — Validar leitura de Owner e bloqueio no OTRS
 
-Valores como `bloqueado`, `desbloqueado`, categorias e títulos de tickets foram observados em `owner_otrs`. Conferir o DOM real do OTRS antes de alterar a extensão. Não tratar esses valores como prova do técnico que bloqueou/assumiu.
+A extensão agora lê `PROPRIETÁRIO` e `BLOQUEAR` por cabeçalho, e o primeiro `bloqueado` persiste em `tickets`. Confirmar no OTRS que cabeçalhos e células correspondem nos dois widgets e que Owner não é confundido com bloqueio. O valor de `BLOQUEAR` não identifica quem bloqueou.
 
 ## PENDENTE — Validar novo executável após as alterações atuais
 
@@ -967,6 +965,9 @@ Campos principais:
 ```text
 numero_ticket BIGINT PRIMARY KEY
 criado_em TIMESTAMP
+status_bloqueio VARCHAR(20)
+bloqueio_confirmado BOOLEAN NOT NULL DEFAULT FALSE
+bloqueado_em TIMESTAMP
 ```
 
 Finalidade:
@@ -974,6 +975,7 @@ Finalidade:
 - registrar todos os tickets conhecidos;
 - garantir unicidade;
 - impedir que o mesmo ticket consuma a fila novamente.
+- manter a confirmação do primeiro bloqueio observado durante a vida do ticket.
 
 ## 10.4 Tabela `fila_estado`
 
@@ -1257,10 +1259,10 @@ Responsabilidades:
 
 - encontrar widgets;
 - localizar tickets;
-- extrair Owner;
+- extrair `PROPRIETÁRIO` e `BLOQUEAR` separadamente;
 - enviar mensagens para `background.js`.
 
-A implementação atual usa uma função semelhante a:
+Implementação histórica (substituída):
 
 ```javascript
 function encontrarOwnerDaLinha(linha) {
@@ -1278,7 +1280,7 @@ function encontrarOwnerDaLinha(linha) {
 }
 ```
 
-Essa implementação é justamente a parte suspeita no bug do Owner.
+O código vigente localiza as colunas `PROPRIETÁRIO` e `BLOQUEAR` por cabeçalho. O estado `bloqueado` é persistido no registro do ticket e não deve ser confundido com Owner.
 
 ## 13.2 `background.js`
 
@@ -1657,7 +1659,7 @@ Não assumir que teste, build, push ou merge foi executado somente porque um com
 
 ## Não está totalmente resolvido
 
-- leitura confiável do Owner em todos os casos;
+- validação operacional da leitura de `PROPRIETÁRIO` e `BLOQUEAR` nos dois widgets do OTRS;
 - operação completa da reavaliação de tickets aguardando técnico ainda precisa ser validada após as alterações atuais.
 
 ## Implementado no código
@@ -1697,17 +1699,17 @@ validade de 15 segundos
 9. Se o técnico original estiver offline, outro técnico pode consumir a vez somente se for o próximo naquele momento.
 10. Supervisão é coringa e não consome a vez.
 11. Para Supervisão existe `ultimo_tecnico_id_anterior`, usado para restaurar a fila quando a atribuição ainda é PENDENTE/TECNICO.
-12. Owner desconhecido é registrado sem inferir cargo; se o ticket ainda estiver aguardando, a rotina separada de reavaliação pode atribuir um técnico elegível.
+12. Owner desconhecido é normalizado para `Admin OTRS` sem inferir cargo; se o ticket ainda estiver aguardando, a rotina separada de reavaliação pode atribuir um técnico elegível.
 13. Sem técnico trabalhando, novo ticket fica `AGUARDANDO_TECNICO`.
 14. Estado da fila usa `fila_estado.ultimo_tecnico_id` e lock `FOR UPDATE`.
 15. Banco oficial é PostgreSQL/Neon; SQLite foi descartado como fonte oficial.
 16. A extensão OTRS lê o DOM do dashboard e envia tickets/Owner para `127.0.0.1:8765`.
 17. Servidor Python local possui `/tickets`, `/owner` e `/estado`.
-18. Existe bug conhecido na leitura do Owner: um caso registrou `bloqueado` em vez do Owner real Luís.
+18. A extensão lê as colunas `PROPRIETÁRIO` e `BLOQUEAR` separadamente; validar os índices nos dois widgets do OTRS.
 19. Heartbeat está implementado: aproximadamente 5s de intervalo e 15s de validade.
 20. Neon/código usam `usuarios.ultimo_heartbeat`.
 21. Reavaliação de `AGUARDANDO_TECNICO` está no código; ainda falta registrar a validação operacional completa.
-22. Existe bug conhecido na extração do Owner; `owner_otrs` pode conter textos de status/assunto.
+22. O primeiro `bloqueado` observado persiste em `tickets.bloqueio_confirmado` e deixa a barra do chamado verde; `desbloqueado` não desfaz a marca.
 23. Mudanças futuras de UI da V2 devem preservar regras e contratos; seguir `docs/integracao_v2.md`.
 24. Não criar soluções paralelas antes de analisar o código existente.
 25. Não remover funcionalidades ou regras sem confirmação.
@@ -1715,4 +1717,4 @@ validade de 15 segundos
 27. Não usar force push/reset destrutivo sem autorização.
 28. PyInstaller gera `dist/FilaME.exe`; o `.env` precisa acompanhar o executável.
 29. A versão oficial `v1.0.0` já existe; não criar nova Release para cada atualização.
-30. Próximos passos: validar reavaliação de aguardando, revisar extração do Owner e integrar a V2 de interface sem regressões; depois validar e gerar novo executável.
+30. Próximos passos: validar a extração de Owner/bloqueio nos widgets e a reavaliação de aguardando; depois validar e gerar novo executável.

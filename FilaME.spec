@@ -6,10 +6,15 @@ from pathlib import Path
 binary_datas, binary_binaries, binary_hidden = collect_all('psycopg_binary')
 a = Analysis(
     ['src/fila_me/app.py'], pathex=[SPECPATH],
-    binaries=binary_binaries, datas=binary_datas + [(str(Path(SPECPATH) / "src/fila_me/ui/assets/icones"), "src/fila_me/ui/assets/icones")],
+    binaries=binary_binaries, datas=binary_datas + [
+        (str(Path(SPECPATH) / "src/fila_me/ui/assets/icones"), "src/fila_me/ui/assets/icones"),
+        (str(Path(SPECPATH) / "src/fila_me/ui/assets/brand/owl-app.png"), "src/fila_me/ui/assets/brand"),
+        (str(Path(SPECPATH) / "src/fila_me/ui/assets/brand/owl.ico"), "src/fila_me/ui/assets/brand"),
+    ],
     hiddenimports=binary_hidden, hookspath=[], hooksconfig={}, runtime_hooks=[],
     excludes=[], noarchive=False,
 )
 pyz = PYZ(a.pure)
 exe = EXE(pyz, a.scripts, a.binaries, a.datas, [], name='FilaME', debug=False,
-          bootloader_ignore_signals=False, strip=False, upx=False, console=False)
+          bootloader_ignore_signals=False, strip=False, upx=False, console=False,
+          icon=str(Path(SPECPATH) / "src/fila_me/ui/assets/brand/owl.ico"))

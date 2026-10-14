@@ -128,7 +128,7 @@ WHERE status = 'PENDENTE'
 ORDER BY atribuido_em;
 ```
 
-`PENDENTE` significa que a atribuição do FILA não foi confirmada na aplicação. **Não significa que o OTRS esteja aguardando confirmação de bloqueio.** `owner_otrs` pode conter extração incorreta; valores como `bloqueado`, `desbloqueado`, categorias ou assunto do ticket não comprovam o Owner real.
+`PENDENTE` significa que a atribuição do FILA não foi confirmada na aplicação. **Não significa que o OTRS esteja aguardando confirmação de bloqueio.** Registros antigos de `owner_otrs` podem conter valores que vieram da heurística anterior, como `bloqueado`, `desbloqueado`, categorias ou assuntos; esses valores não comprovam o Owner real. A extensão atual envia `PROPRIETÁRIO` e `BLOQUEAR` em campos separados.
 
 `AGUARDANDO_TECNICO` é diferente: o ticket ainda não recebeu atribuição técnica. Se o ticket for recebido novamente pela integração, o Owner é processado e, se continuar aguardando e houver técnico elegível, o registro existente pode passar a `PENDENTE`.
 

@@ -19,7 +19,7 @@ class TelaLogin:
         self.frame = tk.Frame(root, bg=self.c["fundo"])
         self.frame.pack(fill="both", expand=True, padx=30, pady=24)
         self.label("Fila ME", 24, True).pack(pady=(0, 18))
-        self.identificacao_entry = self.campo("E-mail")
+        self.identificacao_entry = self.campo("Login")
         self.senha_entry = self.campo("Senha", senha=True)
         self.entrar_btn = botao(self.frame, "Entrar", self.entrar, self.c, destaque=True)
         self.entrar_btn.pack(fill="x", pady=(16, 8))
@@ -61,7 +61,7 @@ class TelaLogin:
             return
         identificacao, senha = self.identificacao_entry.get().strip(), self.senha_entry.get()
         if not identificacao or not senha:
-            messagebox.showwarning("Login", "Informe o e-mail e a senha.")
+            messagebox.showwarning("Login", "Informe o login e a senha.")
             return
         self.entrar_btn.configure(state="disabled", text="Entrando…")
         self.executor.executar(lambda: autenticar_usuario(identificacao, senha), self.receber_login, self.erro)
@@ -71,7 +71,7 @@ class TelaLogin:
             return
         self.entrar_btn.configure(state="normal", text="Entrar")
         if usuario is None:
-            messagebox.showerror("Login", "E-mail ou senha inválidos, ou usuário inativo.")
+            messagebox.showerror("Login", "Login ou senha inválidos, ou usuário inativo.")
         else:
             self.ao_logar(usuario)
 

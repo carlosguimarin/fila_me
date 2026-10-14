@@ -11,6 +11,7 @@ from src.fila_me.database.banco import (
     buscar_proximo_tecnico,
     atualizar_atribuicao_owner,
     atribuir_ticket_aguardando,
+    registrar_status_bloqueio,
 )
 
 HOST = "127.0.0.1"
@@ -178,11 +179,15 @@ class ServidorFilaME(
                             "owner"
                         )
                     )
+                    status = ticket.get(
+                        "status"
+                    )
 
                 else:
 
                     numero_ticket = ticket
                     owner = None
+                    status = None
 
                 if not numero_ticket:
                     continue
@@ -197,9 +202,19 @@ class ServidorFilaME(
                     )
                 )
 
+                estado_bloqueio = (
+                    registrar_status_bloqueio(
+                        numero_ticket,
+                        status,
+                    )
+                )
+
                 if resultado:
 
                     resultado["owner"] = owner
+                    resultado["estado_bloqueio"] = (
+                        estado_bloqueio
+                    )
 
                     novos.append(
                         resultado
@@ -219,6 +234,9 @@ class ServidorFilaME(
 
                         "owner":
                             owner,
+
+                        "estado_bloqueio":
+                            estado_bloqueio,
                     })
 
                 if owner:
@@ -232,6 +250,17 @@ class ServidorFilaME(
 
                     if resultado_owner:
 
+                        # Não propaga Owners desconhecidos recebidos do DOM.
+                        # O banco devolve o nome cadastrado ou o sentinela.
+                        owner = resultado_owner["owner"]
+                        if resultado:
+                            resultado["owner"] = owner
+                        if (
+                            existentes
+                            and existentes[-1]["numero"] == numero_ticket
+                        ):
+                            existentes[-1]["owner"] = owner
+
                         owners_processados.append(
                             resultado_owner
                         )
@@ -240,7 +269,7 @@ class ServidorFilaME(
                             f"Owner processado: "
                             f"Ticket "
                             f"{numero_ticket} "
-                            f"| Owner: {owner} "
+                            f"| Owner: {resultado_owner['owner']} "
                             f"| Status: "
                             f"{resultado_owner['status']} "
                             f"| Tipo: "
@@ -323,6 +352,10 @@ class ServidorFilaME(
                 "owner"
             )
 
+            status = payload.get(
+                "status"
+            )
+
             if not ticket_id:
 
                 raise ValueError(
@@ -333,10 +366,19 @@ class ServidorFilaME(
                 ticket_id
             )
 
-            resultado = (
-                atualizar_atribuicao_owner(
+            resultado = None
+            if owner:
+                resultado = (
+                    atualizar_atribuicao_owner(
+                        ticket_id,
+                        owner,
+                    )
+                )
+
+            estado_bloqueio = (
+                registrar_status_bloqueio(
                     ticket_id,
-                    owner,
+                    status,
                 )
             )
 
@@ -346,10 +388,14 @@ class ServidorFilaME(
                 )
             )
 
+            if resultado:
+                owner = resultado["owner"]
+
             print(
-                f"Owner recebido: "
-                f"Ticket {ticket_id} "
-                f"| Owner: {owner}"
+                f"Ticket recebido: "
+                f"{ticket_id} "
+                f"| Owner: {owner} "
+                f"| Status: {status}"
             )
 
             self.enviar_json({
@@ -360,6 +406,9 @@ class ServidorFilaME(
 
                 "owner":
                     owner,
+
+                "estado_bloqueio":
+                    estado_bloqueio,
 
                 "atribuicao":
                     resultado,

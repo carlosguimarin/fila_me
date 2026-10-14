@@ -49,6 +49,8 @@ class JanelaPrincipal:
                             (280,280) if compacto else (330,330))
         self._modo_renderizado = self.prefs["modo"]
         self._assinatura_historico = None
+        self._widgets_historico = {}
+        self._placeholder_historico = None
         self.root.configure(bg=self.c["fundo"])
         self.frame = tk.Frame(self.root, bg=self.c["fundo"])
         self.frame.pack(fill="both", expand=True, padx=7,pady=6)
@@ -72,7 +74,6 @@ class JanelaPrincipal:
         self.preferencias_botao.pack(side="left",padx=2)
         sair = BotaoIcone(acoes,"sair",self.ao_sair,self.c,cor=self.c["coral"],fundo=self.c["saida"],largura=28,altura=28)
         sair.pack(side="left",padx=2)
-        Tooltip(sair,"Sair da conta")
         self.menus = []
         self.menu_preferencias = MenuSuspenso(self.root, self.preferencias_botao,
             self.construir_preferencias, self.fechar_outros_menus, self.c["fundo"], self.c["borda"])
@@ -265,61 +266,201 @@ class JanelaPrincipal:
                               fg=self.c["secundario"] if desatualizado else self.c["verde"])
         if not getattr(self, "copia_timer", None):
             self.conexao.configure(text=self.estado_conexao)
-        limite=9
         carregando = getattr(self, "_filtro_dados", self.prefs.get("filtro", "todos")) != self.prefs.get("filtro", "todos")
-        linhas=[] if carregando else self.dados["historico"][:limite]
+        linhas=[] if carregando else self.dados["historico"]
         assinatura=(carregando, self.prefs.get("filtro", "todos"), tuple(tuple(a.get(k) for k in (
             "numero_ticket","tecnico","status","tipo_atribuicao","owner_otrs","atribuido_em",
-            "meu")) for a in linhas))
-        if assinatura!=self._assinatura_historico:
-            posicao=self.historico.canvas.yview()[0]
-            self.historico.limpar()
-            for a in linhas:
-                if a["tipo_atribuicao"]=="SUPERVISAO":
-                    login="Supervisão"
-                else:
-                    login=nome_curto(a["tecnico"]) or "Aguardando técnico"
-                meu=a["meu"] and a["tipo_atribuicao"]!="SUPERVISAO"
-                cor=self.cor if meu else self.c["borda"]
-                row=self.linha(self.historico.conteudo,a["numero_ticket"],login,cor,a)
-                self.historico.vincular_roda(row)
-            if not linhas:
-                self.vazio(self.historico, "Atualizando filtro…" if carregando else
-                           "Nenhuma atribuição para você." if self.prefs.get("filtro") == "meus" else "Nenhuma atribuição registrada.")
-            self.historico.canvas.update_idletasks()
-            self.historico.canvas.yview_moveto(posicao)
+            "meu","status_bloqueio","bloqueio_confirmado")) for a in linhas))
+        if assinatura!=self._assinatura_historico and not carregando:
+            self.sincronizar_historico(linhas)
             self._assinatura_historico=assinatura
         self.renderizar_online()
+
+    def dados_apresentacao_historico(self, atribuicao):
+        if atribuicao["tipo_atribuicao"] == "SUPERVISAO":
+            login = "Supervisão"
+        else:
+            login = nome_curto(atribuicao["tecnico"]) or "Aguardando técnico"
+        propria = self.atribuicao_do_usuario(atribuicao)
+        assinatura = tuple(atribuicao.get(chave) for chave in (
+            "numero_ticket", "tecnico", "status", "tipo_atribuicao", "owner_otrs",
+            "atribuido_em", "status_bloqueio", "bloqueio_confirmado",
+        )) + (login, propria)
+        return login, propria, assinatura
+
+    def sincronizar_historico(self, linhas):
+        posicao = self.historico.posicao_vertical()
+        chaves = {a["numero_ticket"] for a in linhas}
+        alterado = False
+        for chave in tuple(self._widgets_historico):
+            if chave not in chaves:
+                self._widgets_historico.pop(chave)["widget"].destroy()
+                alterado = True
+
+        if not linhas:
+            texto = (
+                "Nenhuma atribuição para você."
+                if self.prefs.get("filtro") == "meus"
+                else "Nenhuma atribuição registrada."
+            )
+            if self._placeholder_historico is None:
+                self._placeholder_historico = self.label(
+                    self.historico.conteudo, texto, 10, secundario=True
+                )
+                self._placeholder_historico.pack(padx=14, pady=22, anchor="w")
+                alterado = True
+            elif self._placeholder_historico.cget("text") != texto:
+                self._placeholder_historico.configure(text=texto)
+                alterado = True
+            if alterado:
+                self.historico.restaurar_posicao_vertical(posicao)
+            return
+
+        if self._placeholder_historico is not None:
+            self._placeholder_historico.destroy()
+            self._placeholder_historico = None
+            alterado = True
+
+        # O histórico vem do mais recente para o mais antigo. Inserir ao
+        # contrário posiciona as novas linhas no topo sem recriar as antigas.
+        for atribuicao in reversed(linhas):
+            chave = atribuicao["numero_ticket"]
+            login, propria, assinatura_linha = self.dados_apresentacao_historico(atribuicao)
+            item = self._widgets_historico.get(chave)
+            if item is None:
+                filhos = self.historico.conteudo.winfo_children()
+                row = self.linha(
+                    self.historico.conteudo,
+                    chave,
+                    login,
+                    atribuicao,
+                    propria,
+                    before=filhos[0] if filhos else None,
+                )
+                self.historico.vincular_roda(row)
+                self._widgets_historico[chave] = {
+                    "widget": row,
+                    "assinatura": assinatura_linha,
+                }
+                alterado = True
+            elif item["assinatura"] != assinatura_linha:
+                self.atualizar_linha(item["widget"], chave, login, atribuicao, propria)
+                item["assinatura"] = assinatura_linha
+                alterado = True
+
+        if alterado:
+            self.historico.restaurar_posicao_vertical(posicao)
 
     def vazio(self, lista, texto):
         self.label(lista.conteudo, texto, 10, secundario=True).pack(padx=14, pady=22, anchor="w")
 
-    def linha(self, parent, numero, login, cor, dados=None):
+    def atribuicao_do_usuario(self, dados):
+        nome_usuario = self.usuario["nome"].casefold()
+        if self.usuario["cargo"] == "supervisao":
+            return (
+                dados["tipo_atribuicao"] == "SUPERVISAO"
+                and str(dados.get("owner_otrs") or "").casefold() == nome_usuario
+            )
+        return (
+            dados["tipo_atribuicao"] != "SUPERVISAO"
+            and str(dados.get("tecnico") or "").casefold() == nome_usuario
+        )
+
+    def linha(self, parent, numero, login, dados=None, propria=False, before=None):
         tamanho_texto = 8 if self.prefs["modo"] == "simples" else 9
         row=tk.Frame(parent,bg=self.c["painel"],height=self.altura_linha)
-        row.pack(fill="x",padx=5)
+        if before is None:
+            row.pack(fill="x",padx=5)
+        else:
+            row.pack(fill="x",padx=5,before=before)
         row.pack_propagate(False)
-        tk.Frame(row,width=3,bg=cor).pack(side="left",fill="y",padx=(0,8),pady=4)
         conteudo = tk.Frame(row, bg=self.c["painel"])
         conteudo.pack(fill="x",expand=True)
         texto = tk.Frame(conteudo, bg=self.c["painel"])
         texto.pack(fill="x")
-        link = tk.Label(texto, text=f"#{numero}", bg=self.c["painel"], fg=self.c["texto"],
+        row.texto = texto
+        link = tk.Label(texto, text=f"#{numero}", bg=self.c["painel"],
+                        fg=self.cor if propria else self.c["secundario"],
                         font=(FONTE_PADRAO,tamanho_texto),cursor="hand2", anchor="w")
         link.pack(side="left")
         link.bind("<Button-1>", lambda e: self.copiar_ticket(numero))
         link.bind("<Button-3>", lambda e: self.menu_ticket(e, numero, None))
-        tk.Label(texto, text=login, bg=self.c["painel"], fg=self.c["secundario"],
-                 font=(FONTE_PADRAO,tamanho_texto)).pack(side="left", padx=(7, 0))
+        row.link_ticket = link
+        nome_login = tk.Label(
+            texto,
+            text=login,
+            bg=self.c["painel"],
+            fg=self.cor if propria else self.c["secundario"],
+            font=(FONTE_PADRAO, tamanho_texto),
+        )
+        nome_login.pack(side="left", padx=(7, 0))
+        row.nome_login = nome_login
+        row.cadeado = self.cadeado(
+            texto,
+            bool(dados and dados.get("bloqueio_confirmado")),
+            propria,
+        )
+        row.bloqueado = bool(dados and dados.get("bloqueio_confirmado"))
+        row.propria = propria
+        row.detalhe = None
         if self.prefs["modo"] == "avancado":
             detalhe = dados['status'].replace('_', ' ').capitalize()
             if dados.get("atribuido_em"):
                 detalhe += " • " + dados["atribuido_em"].strftime("%d/%m %H:%M")
             if dados.get("owner_otrs"):
                 detalhe += " • Owner informado: " + dados["owner_otrs"]
-            tk.Label(conteudo,text=detalhe,bg=self.c["painel"],fg=self.c["secundario"],
-                     font=(FONTE_PADRAO,8),anchor="w").pack(fill="x",pady=(1,0))
+            if dados.get("status_bloqueio"):
+                detalhe += " • Status: " + dados["status_bloqueio"]
+            row.detalhe = tk.Label(conteudo,text=detalhe,bg=self.c["painel"],fg=self.c["secundario"],
+                                   font=(FONTE_PADRAO,8),anchor="w")
+            row.detalhe.pack(fill="x",pady=(1,0))
         return row
+
+    def atualizar_linha(self, row, numero, login, dados, propria):
+        cor = self.cor if propria else self.c["secundario"]
+        if row.link_ticket.cget("fg") != cor:
+            row.link_ticket.configure(fg=cor)
+        if row.nome_login.cget("text") != login or row.nome_login.cget("fg") != cor:
+            row.nome_login.configure(text=login, fg=cor)
+        bloqueado = bool(dados.get("bloqueio_confirmado"))
+        if row.bloqueado != bloqueado or row.propria != propria:
+            row.cadeado.destroy()
+            row.cadeado = self.cadeado(row.texto, bloqueado, propria)
+            row.bloqueado = bloqueado
+            row.propria = propria
+        if row.detalhe is not None:
+            detalhe = dados["status"].replace("_", " ").capitalize()
+            if dados.get("atribuido_em"):
+                detalhe += " • " + dados["atribuido_em"].strftime("%d/%m %H:%M")
+            if dados.get("owner_otrs"):
+                detalhe += " • Owner informado: " + dados["owner_otrs"]
+            if dados.get("status_bloqueio"):
+                detalhe += " • Status: " + dados["status_bloqueio"]
+            if row.detalhe.cget("text") != detalhe:
+                row.detalhe.configure(text=detalhe)
+
+    def cadeado(self, parent, bloqueado, propria):
+        cor = (
+            self.c["verde"] if bloqueado and propria
+            else self.cor if propria
+            else self.c["secundario"]
+        )
+        from src.fila_me.ui.icones import carregar_icone
+
+        nome_icone = "lock" if bloqueado else "lock-open"
+        imagem = carregar_icone(
+            nome_icone,
+            12,
+            cor,
+            self.root,
+        )
+        icone = tk.Label(
+            parent,
+            image=imagem,
+            bg=self.c["painel"],
+        )
+        icone.pack(side="right", padx=(4, 2))
+        icone.image = imagem
 
     def cancelar_aviso_copia(self):
         if getattr(self, "copia_timer", None) is not None:

@@ -36,8 +36,26 @@ def criar_tabelas():
                 CREATE TABLE IF NOT EXISTS tickets (
                     numero_ticket BIGINT PRIMARY KEY,
                     criado_em TIMESTAMP
-                        DEFAULT CURRENT_TIMESTAMP
+                        DEFAULT CURRENT_TIMESTAMP,
+                    status_bloqueio VARCHAR(20),
+                    bloqueio_confirmado BOOLEAN NOT NULL DEFAULT FALSE,
+                    bloqueado_em TIMESTAMP
                 );
+            """)
+            cursor.execute("""
+                ALTER TABLE tickets
+                ADD COLUMN IF NOT EXISTS
+                status_bloqueio VARCHAR(20);
+            """)
+            cursor.execute("""
+                ALTER TABLE tickets
+                ADD COLUMN IF NOT EXISTS
+                bloqueio_confirmado BOOLEAN NOT NULL DEFAULT FALSE;
+            """)
+            cursor.execute("""
+                ALTER TABLE tickets
+                ADD COLUMN IF NOT EXISTS
+                bloqueado_em TIMESTAMP;
             """)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS fila_estado (
@@ -319,6 +337,49 @@ def registrar_ticket_e_atribuir(numero_ticket):
         "status": "PENDENTE",
     }
 
+def registrar_status_bloqueio(numero_ticket, status_bloqueio):
+    """Registra o estado OTRS atual e preserva a primeira confirmação de bloqueio."""
+    if not isinstance(status_bloqueio, str):
+        return None
+
+    status_bloqueio = status_bloqueio.strip().casefold()
+    if status_bloqueio not in ("bloqueado", "desbloqueado"):
+        return None
+
+    with conectar() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE tickets
+                SET status_bloqueio = %s,
+                    bloqueio_confirmado =
+                        bloqueio_confirmado OR %s = 'bloqueado',
+                    bloqueado_em = CASE
+                        WHEN %s = 'bloqueado'
+                            THEN COALESCE(bloqueado_em, CURRENT_TIMESTAMP)
+                        ELSE bloqueado_em
+                    END
+                WHERE numero_ticket = %s
+                RETURNING numero_ticket, status_bloqueio,
+                          bloqueio_confirmado;
+                """,
+                (
+                    status_bloqueio,
+                    status_bloqueio,
+                    status_bloqueio,
+                    numero_ticket,
+                ),
+            )
+            linha = cursor.fetchone()
+        conn.commit()
+    if linha is None:
+        return None
+    return {
+        "numero_ticket": linha[0],
+        "status_bloqueio": linha[1],
+        "bloqueio_confirmado": bool(linha[2]),
+    }
+
 def atribuir_ticket_aguardando(numero_ticket):
     with conectar() as conn:
         with conn.cursor() as cursor:
@@ -488,24 +549,42 @@ def buscar_painel_visual(usuario, filtro="todos"):
             if filtro == "meus":
                 cursor.execute(
                     """
-                    SELECT numero_ticket, tecnico, atribuido_em, status,
-                           owner_otrs, tipo_atribuicao
-                    FROM atribuicoes
-                    WHERE LOWER(tecnico) = LOWER(%s)
-                      AND tipo_atribuicao <> 'SUPERVISAO'
-                    ORDER BY id DESC
-                    LIMIT 9;
+                    SELECT a.numero_ticket, a.tecnico, a.atribuido_em, a.status,
+                           CASE
+                               WHEN EXISTS (
+                                   SELECT 1 FROM usuarios u
+                                   WHERE LOWER(u.nome) = LOWER(a.owner_otrs)
+                                     AND u.ativo = TRUE
+                               ) THEN a.owner_otrs
+                               ELSE 'Admin OTRS'
+                           END AS owner_otrs,
+                           a.tipo_atribuicao,
+                           t.status_bloqueio, t.bloqueio_confirmado
+                    FROM atribuicoes a
+                    LEFT JOIN tickets t ON t.numero_ticket = a.numero_ticket
+                    WHERE LOWER(a.tecnico) = LOWER(%s)
+                      AND a.tipo_atribuicao <> 'SUPERVISAO'
+                    ORDER BY a.id DESC;
                     """,
                     (usuario["nome"],),
                 )
             else:
                 cursor.execute(
                     """
-                    SELECT numero_ticket, tecnico, atribuido_em, status,
-                           owner_otrs, tipo_atribuicao
-                    FROM atribuicoes
-                    ORDER BY id DESC
-                    LIMIT 9;
+                    SELECT a.numero_ticket, a.tecnico, a.atribuido_em, a.status,
+                           CASE
+                               WHEN EXISTS (
+                                   SELECT 1 FROM usuarios u
+                                   WHERE LOWER(u.nome) = LOWER(a.owner_otrs)
+                                     AND u.ativo = TRUE
+                               ) THEN a.owner_otrs
+                               ELSE 'Admin OTRS'
+                           END AS owner_otrs,
+                           a.tipo_atribuicao,
+                           t.status_bloqueio, t.bloqueio_confirmado
+                    FROM atribuicoes a
+                    LEFT JOIN tickets t ON t.numero_ticket = a.numero_ticket
+                    ORDER BY a.id DESC;
                     """
                 )
             linhas = cursor.fetchall()
@@ -517,10 +596,13 @@ def buscar_painel_visual(usuario, filtro="todos"):
             "status": status,
             "owner_otrs": owner,
             "tipo_atribuicao": tipo,
+            "status_bloqueio": status_bloqueio,
+            "bloqueio_confirmado": bool(bloqueio_confirmado),
             "meu": tipo != "SUPERVISAO" and bool(tecnico)
                    and tecnico.casefold() == usuario["nome"].casefold(),
         }
-        for numero, tecnico, data, status, owner, tipo in linhas
+        for numero, tecnico, data, status, owner, tipo, status_bloqueio,
+        bloqueio_confirmado in linhas
     ]
     online = [
         {"id": identificador, "nome": nome, "cargo": "tecnico", "trabalhando": True}
@@ -745,11 +827,10 @@ def atualizar_atribuicao_owner(
                 ),
             )
             usuario_owner = cursor.fetchone()
-            # Owner não cadastrado.
-            #
-            # Apenas registra o Owner.
-            # A fila não é alterada.
+            # Owner não cadastrado: guarda somente o valor sentinela
+            # "Admin OTRS". A fila não é alterada.
             if usuario_owner is None:
+                owner = "Admin OTRS"
                 cursor.execute(
                     """
                     UPDATE atribuicoes

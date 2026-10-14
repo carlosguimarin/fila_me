@@ -45,7 +45,7 @@ Se a V2 usar uma arquitetura diferente de Tkinter, preserve as regras no módulo
 - Quando um ticket ativo já conhecido em `AGUARDANDO_TECNICO` volta a ser recebido, o servidor processa Owner primeiro. Se não tiver sido confirmado como Supervisão e continuar aguardando, `atribuir_ticket_aguardando()` pode atribuir a atribuição existente ao próximo técnico elegível e avançar a fila. Não deve criar nova linha de ticket/atribuição nem varrer registros ausentes do OTRS.
 - Supervisão é coringa: não participa da rotação. Owner reconhecido como supervisor deve resultar em `tipo_atribuicao = 'SUPERVISAO'`, histórico como `Supervisão` e sem consumo de vez.
 - Owner igual ou diferente do técnico é tratado pela função de banco existente. A UI não deve reimplementar essas decisões.
-- Owner desconhecido não permite inferir cargo. A identidade desconhecida não altera a fila por si só.
+- Owner desconhecido é normalizado para `Admin OTRS`; não permite inferir cargo e não altera a fila por si só.
 
 ### Presença e ciclo de vida da tela
 
@@ -68,7 +68,7 @@ Se a V2 usar uma arquitetura diferente de Tkinter, preserve as regras no módulo
 - A extensão envia dados ao servidor Python em `127.0.0.1:8765`; o navegador não acessa o Neon.
 - Endpoints atuais: `POST /tickets`, `POST /owner` e `GET /estado`.
 - A extensão coleta; a decisão de atribuição pertence ao backend.
-- Há um bug conhecido na extração do Owner: valores como `bloqueado`, `desbloqueado`, categorias ou assunto do chamado apareceram em `owner_otrs`. Não trate esse campo como identidade confiável quando contiver esses valores e não “corrija” a extração sem conferir o DOM real.
+- Historicamente, valores como `bloqueado` e `desbloqueado` chegaram a `owner_otrs`. A extensão V1 agora localiza `PROPRIETÁRIO` e `BLOQUEAR` por cabeçalho, usando o DOM observado; valide os dois widgets no OTRS antes de distribuição e não interprete o valor de bloqueio como identidade de quem bloqueou.
 
 ## Procedimento de integração
 

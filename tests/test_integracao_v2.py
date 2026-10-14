@@ -61,8 +61,8 @@ class TesteIntegracaoV2(unittest.TestCase):
             {"psycopg": types.ModuleType("psycopg"), "dotenv": dotenv},
         )
         cursor = CursorFalso([
-            (4102, "Luís", None, "CONFIRMADO", "Luís", "TECNICO"),
-            (4103, "Carlos", None, "CONFIRMADO", "Mateus", "SUPERVISAO"),
+            (4102, "Luís", None, "CONFIRMADO", "Luís", "TECNICO", "bloqueado", True),
+            (4103, "Carlos", None, "CONFIRMADO", "Mateus", "SUPERVISAO", None, False),
         ])
         banco.conectar = lambda: ConexaoFalsa(cursor)
         banco.buscar_tecnicos_trabalhando = lambda: [(1, "Carlos"), (2, "Luís")]
@@ -73,6 +73,9 @@ class TesteIntegracaoV2(unittest.TestCase):
         self.assertEqual(painel["proximo"], "Carlos")
         self.assertTrue(painel["historico"][0]["meu"])
         self.assertFalse(painel["historico"][1]["meu"])
+        self.assertTrue(painel["historico"][0]["bloqueio_confirmado"])
+        self.assertFalse(painel["historico"][1]["bloqueio_confirmado"])
+        self.assertEqual(painel["historico"][0]["status_bloqueio"], "bloqueado")
         self.assertEqual(cursor.parametros, ("Luís",))
         self.assertIn("SELECT", cursor.consulta)
         self.assertNotIn("UPDATE", cursor.consulta)
@@ -94,6 +97,17 @@ class TesteIntegracaoV2(unittest.TestCase):
         janela = modulo.JanelaPrincipal.__new__(modulo.JanelaPrincipal)
         janela.ativo = True
         janela.usuario = {"id": 7, "cargo": "tecnico"}
+        janela.atribuicao_do_usuario = lambda dados: False
+        linha_supervisao = {
+            "numero_ticket": 2026100554003418,
+            "tecnico": "Luís Bolina Martins",
+            "tipo_atribuicao": "SUPERVISAO",
+            "owner_otrs": "Mateus Marinho Furtado",
+        }
+        self.assertEqual(
+            janela.dados_apresentacao_historico(linha_supervisao)[0],
+            "Supervisão",
+        )
         janela.timer = "estado"
         janela.heartbeat_timer = "heartbeat"
         janela.popup_online = None

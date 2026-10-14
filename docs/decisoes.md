@@ -42,7 +42,7 @@
 
 ## D006 — Supervisor no histórico
 
-**Decisão:** quando o Owner é supervisor registrado, o histórico exibe `Supervisão`.
+**Decisão:** quando o Owner é supervisor registrado, o histórico exibe sempre `Supervisão`, nunca o nome pessoal do supervisor. O nome real permanece em `owner_otrs` para auditoria.
 
 **Motivo:** evitar que a interface atribua falsamente a responsabilidade final ao técnico provisional.
 
@@ -55,7 +55,7 @@
 **Exemplo:**
 `Admin OTRS`
 
-**Comportamento:** registrar Owner e não inferir cargo nem alterar a fila por causa da identidade desconhecida. Separadamente, se a atribuição estiver `AGUARDANDO_TECNICO`, a regra D016 pode atribuir o ticket a um técnico elegível.
+**Comportamento:** qualquer Owner que não corresponda a um usuário ativo é normalizado para exatamente `Admin OTRS`, inclusive em resposta/logs e na visualização de dados antigos. Não inferir cargo nem alterar a fila por causa da identidade desconhecida. Separadamente, se a atribuição estiver `AGUARDANDO_TECNICO`, a regra D016 pode atribuir o ticket a um técnico elegível.
 
 ---
 

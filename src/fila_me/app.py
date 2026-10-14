@@ -1,5 +1,6 @@
 import threading
 import tkinter as tk
+from pathlib import Path
 
 from src.fila_me.integracao.servidor_local import (
     iniciar_servidor,
@@ -21,6 +22,13 @@ class Aplicacao:
     def __init__(self):
 
         self.root = tk.Tk()
+
+        caminho_icone = Path(__file__).resolve().parent / "ui" / "assets" / "brand" / "owl-app.png"
+        self.icone_aplicacao = tk.PhotoImage(file=str(caminho_icone))
+        self.root.iconphoto(True, self.icone_aplicacao)
+        caminho_icone_windows = caminho_icone.with_name("owl.ico")
+        if caminho_icone_windows.exists():
+            self.root.iconbitmap(str(caminho_icone_windows))
 
         self.root.title(
             "Fila ME"

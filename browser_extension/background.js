@@ -69,7 +69,10 @@ chrome.runtime.onMessage.addListener(
                             mensagem.ticket_id,
 
                         owner:
-                            mensagem.owner
+                            mensagem.owner,
+
+                        status:
+                            mensagem.status
                     })
                 }
             )

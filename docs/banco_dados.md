@@ -24,13 +24,17 @@ Estrutura conhecida:
 ```sql
 tickets(
     numero_ticket BIGINT PRIMARY KEY,
-    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status_bloqueio VARCHAR(20),
+    bloqueio_confirmado BOOLEAN NOT NULL DEFAULT FALSE,
+    bloqueado_em TIMESTAMP
 )
 ```
 
 Função:
 - catálogo de tickets já registrados;
 - impede duplicação por número.
+- guarda o primeiro bloqueio observado no OTRS; a confirmação permanece associada ao número do ticket.
 
 ### `fila_estado`
 
@@ -169,6 +173,8 @@ Com o bloqueio, uma transação entra primeiro, atualiza o estado e a próxima l
 - trata técnico igual ao provisional;
 - trata técnico diferente;
 - trata Owner desconhecido.
+
+Owners que não correspondem a um usuário ativo são persistidos e apresentados como `Admin OTRS`; o nome bruto recebido do dashboard não deve aparecer na resposta da integração.
 
 Nenhum desses caminhos deve alterar a posição da fila.
 

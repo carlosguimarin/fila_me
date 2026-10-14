@@ -28,34 +28,16 @@ O texto do link é usado como número do ticket.
 
 Um `Set` evita processar o mesmo número duas vezes dentro da mesma leitura da página.
 
-## 4. Owner
+## 4. Proprietário e bloqueio
 
-O código atual tenta obter o Owner da última célula (`td`) da linha do ticket, procurando um elemento `[title]`. Essa heurística **não é confiável em todos os casos**: foram encontrados valores como `bloqueado`, `desbloqueado`, categorias e títulos de chamados em `owner_otrs`.
+O código ignora as células auxiliares `Flags`, encontra a célula cujo valor é exatamente `bloqueado` ou `desbloqueado` e lê o Owner da célula imediatamente anterior. Assim, os campos permanecem separados:
 
-Esses valores não confirmam quem assumiu o ticket. Validar a extração contra o DOM real do OTRS antes de substituir a lógica atual.
+- `PROPRIETÁRIO` é enviado como Owner real;
+- `BLOQUEAR` é enviado separadamente como `status` (`bloqueado` ou `desbloqueado`).
 
-Implementação atual conhecida:
+O estado recebido fica em `tickets.status_bloqueio`; não deve ser gravado em `owner_otrs`. O primeiro valor `bloqueado` também marca `tickets.bloqueio_confirmado = TRUE` e registra `bloqueado_em`. A confirmação é permanente: `desbloqueado` atualiza o estado atual, mas não remove a confirmação histórica. Isso preserva o verde se o chamado voltar para a fila. O campo não identifica quem realizou o bloqueio.
 
-```javascript
-getAttribute("title")
-```
-
-A função conhecida:
-
-```javascript
-function encontrarOwnerDaLinha(linha) {
-    const celulas = [...linha.querySelectorAll("td")];
-    if (celulas.length === 0) return null;
-
-    const ultimaCelula = celulas[celulas.length - 1];
-    const elementoOwner = ultimaCelula.querySelector("[title]");
-
-    if (!elementoOwner) return null;
-
-    const owner = elementoOwner.getAttribute("title")?.trim();
-    return owner || null;
-}
-```
+As contas do OTRS precisam exibir as colunas `PROPRIETÁRIO` e `BLOQUEAR` nos widgets monitorados. Se o cabeçalho ou a coluna não estiver presente, a extensão deixa o campo correspondente vazio; não infere o valor de outra coluna.
 
 ## 5. Leitura
 
@@ -64,7 +46,8 @@ A função conhecida produz objetos:
 ```javascript
 {
     numero: numero,
-    owner: owner
+    owner: owner,
+    status: status
 }
 ```
 
@@ -90,6 +73,8 @@ O `background.js` envia os dados para o servidor Python local.
 Endpoints conhecidos:
 - `/tickets`
 - `/owner`
+
+Os dois fluxos podem registrar a primeira observação de bloqueio: `/tickets` para Chamados Novos e `/owner` para Chamados Abertos. O servidor só marca tickets já registrados; ele não cria tickets ausentes do fluxo normal.
 
 Servidor:
 

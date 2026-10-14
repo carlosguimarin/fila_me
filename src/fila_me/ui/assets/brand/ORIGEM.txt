@@ -1,0 +1,4 @@
+Mascote oficial FILA ME: ilustração aprovada pelo responsável do projeto em 2026-10-14.
+owl.png é a arte mestra com transparência.
+owl-app.png e owl.ico são os formatos usados pela janela e pelo executável Windows.
+O script scripts/build_brand_icons.py deriva os tamanhos do ícone da extensão.

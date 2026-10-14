@@ -103,11 +103,13 @@ class BarraRolagem(tk.Canvas):
         if self.inicio*altura<=event.y<=self.fim*altura:
             self.arraste=event.y-self.inicio*altura
         else:
-            self.canvas_alvo.yview_moveto(max(0,event.y/altura-(self.fim-self.inicio)/2))
+            posicao=event.y/altura-(self.fim-self.inicio)/2
+            self.canvas_alvo.yview_moveto(min(1,max(0,posicao)))
 
     def mover(self,event):
         if self.arraste is not None:
-            self.canvas_alvo.yview_moveto(max(0,(event.y-self.arraste)/max(1,self.winfo_height())))
+            posicao=(event.y-self.arraste)/max(1,self.winfo_height())
+            self.canvas_alvo.yview_moveto(min(1,max(0,posicao)))
 
 
 class ListaRolavel(tk.Frame):
@@ -144,8 +146,29 @@ class ListaRolavel(tk.Frame):
             unidades=-int(self._delta/120)
             self._delta+=unidades*120
         if unidades:
-            self.canvas.yview_scroll(unidades,"units")
+            inicio,fim=self.canvas.yview()
+            if unidades<0 and inicio<=0:
+                self.canvas.yview_moveto(0)
+            elif unidades>0 and fim>=1:
+                self.canvas.yview_moveto(1)
+            else:
+                self.canvas.yview_scroll(unidades,"units")
         return "break"
+
+    def posicao_vertical(self):
+        return max(0,self.canvas.canvasy(0))
+
+    def restaurar_posicao_vertical(self,posicao):
+        self.canvas.update_idletasks()
+        caixa=self.canvas.bbox("all")
+        if not caixa:
+            self.canvas.yview_moveto(0)
+            return
+        inicio,fim=caixa[1],caixa[3]
+        altura_conteudo=max(1,fim-inicio)
+        topo_maximo=max(inicio,fim-max(1,self.canvas.winfo_height()))
+        topo=min(max(inicio,posicao),topo_maximo)
+        self.canvas.yview_moveto((topo-inicio)/altura_conteudo)
 
     def limpar(self):
         for widget in self.conteudo.winfo_children():

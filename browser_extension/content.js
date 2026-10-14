@@ -1,29 +1,47 @@
-function encontrarOwnerDaLinha(linha) {
-
-    const celulas = [
-        ...linha.querySelectorAll("td")
-    ];
-
-    if (celulas.length === 0) {
+function lerCelula(celula) {
+    if (!celula) {
         return null;
     }
 
-    const ultimaCelula =
-        celulas[celulas.length - 1];
+    const elementoComTitulo = celula.querySelector("[title]");
+    const valor = elementoComTitulo
+        ? elementoComTitulo.getAttribute("title")
+        : celula.innerText;
 
-    const elementoOwner =
-        ultimaCelula.querySelector("[title]");
+    return valor?.trim() || null;
+}
 
-    if (!elementoOwner) {
-        return null;
+
+function encontrarDadosDaLinha(linha) {
+    // Owner e BLOQUEAR são células distintas. O status tem o texto exato
+    // bloqueado/desbloqueado e o Owner fica imediatamente antes dele.
+    // Ignore as células auxiliares Flags do OTRS.
+    const celulasDados = [...linha.cells].filter(
+        celula => !celula.classList.contains("Flags")
+    );
+    let indiceStatus = -1;
+    for (let indice = celulasDados.length - 1; indice >= 0; indice--) {
+        const valor = lerCelula(celulasDados[indice])
+            ?.toLocaleLowerCase("pt-BR");
+        if (["bloqueado", "desbloqueado"].includes(valor)) {
+            indiceStatus = indice;
+            break;
+        }
     }
 
-    const owner =
-        elementoOwner
-            .getAttribute("title")
-            ?.trim();
+    if (indiceStatus < 1) {
+        return { owner: null, status: null };
+    }
 
-    return owner || null;
+    const status = lerCelula(celulasDados[indiceStatus])
+        .toLocaleLowerCase("pt-BR");
+    const owner = lerCelula(celulasDados[indiceStatus - 1]);
+    const ownerNormalizado = owner?.toLocaleLowerCase("pt-BR");
+    const ownerValido = ["bloqueado", "desbloqueado"].includes(ownerNormalizado)
+        ? null
+        : owner;
+
+    return { owner: ownerValido, status };
 }
 
 
@@ -92,12 +110,13 @@ function encontrarTicketsNoWidget(widget) {
             continue;
         }
 
-        const owner =
-            encontrarOwnerDaLinha(linha);
+        const { owner, status } =
+            encontrarDadosDaLinha(linha);
 
         tickets.push({
             numero: numero,
-            owner: owner
+            owner: owner,
+            status: status
         });
     }
 
@@ -127,7 +146,7 @@ function enviarOwnersChamadosAbertos(tickets) {
 
     for (const ticket of tickets) {
 
-        if (!ticket.owner) {
+        if (!ticket.owner && !ticket.status) {
             continue;
         }
 
@@ -139,7 +158,8 @@ function enviarOwnersChamadosAbertos(tickets) {
         chrome.runtime.sendMessage({
             tipo: "owner_otrs",
             ticket_id: ticket.numero,
-            owner: ticket.owner
+            owner: ticket.owner,
+            status: ticket.status
         });
     }
 }
