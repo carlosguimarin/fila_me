@@ -1,4 +1,5 @@
 import threading
+import sys
 import tkinter as tk
 from pathlib import Path
 
@@ -23,7 +24,24 @@ class Aplicacao:
 
         self.root = tk.Tk()
 
-        caminho_icone = Path(__file__).resolve().parent / "ui" / "assets" / "brand" / "owl-app.png"
+        if getattr(sys, "frozen", False):
+            pasta_assets_marca = (
+                Path(sys._MEIPASS)
+                / "src"
+                / "fila_me"
+                / "ui"
+                / "assets"
+                / "brand"
+            )
+        else:
+            pasta_assets_marca = (
+                Path(__file__).resolve().parent
+                / "ui"
+                / "assets"
+                / "brand"
+            )
+
+        caminho_icone = pasta_assets_marca / "owl-app.png"
         self.icone_aplicacao = tk.PhotoImage(file=str(caminho_icone))
         self.root.iconphoto(True, self.icone_aplicacao)
         caminho_icone_windows = caminho_icone.with_name("owl.ico")
