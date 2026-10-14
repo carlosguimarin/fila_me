@@ -1,62 +1,35 @@
-FILA ME — INSTALAÇÃO
+FILA ME — INSTRUÇÕES DE INSTALAÇÃO
 
-1. BAIXAR O FILA ME
+ARQUIVOS DA VERSÃO
+- FilaME.zip: contém o aplicativo FilaME.exe.
+- FilaME-Extensao.zip: contém a extensão do navegador.
+- O arquivo .env é fornecido separadamente pela equipe responsável. Coloque-o
+  na mesma pasta do FilaME.exe. Não compartilhe esse arquivo publicamente.
 
-Baixe:
-- FilaME.exe
-- FilaME-Extensao.zip
+INSTALAR O APLICATIVO
+1. Extraia FilaME.zip para uma pasta.
+2. Coloque o arquivo .env recebido da equipe ao lado do FilaME.exe.
+3. Execute FilaME.exe e entre com seu login.
 
-2. ARQUIVO .ENV
+INSTALAR A EXTENSÃO DO NAVEGADOR
+1. Extraia FilaME-Extensao.zip para uma pasta permanente.
+2. Abra o gerenciador de extensões do navegador e ative o modo de desenvolvedor.
+3. Escolha “Carregar sem compactação” ou a opção equivalente.
+4. Selecione a pasta extraída que contém o arquivo manifest.json.
+5. Abra o OTRS e permita o acesso da extensão ao site, se solicitado.
 
-Solicite o arquivo .env à equipe de desenvolvimento.
+A extensão pode ser usada em navegadores compatíveis com extensões Manifest V3,
+service workers e carregamento de extensões locais. Ela monitora:
+https://helpdesk.mpsc.mp.br/otrs/
 
-Coloque o arquivo .env na mesma pasta do FilaME.exe.
+CONFIGURAR O DASHBOARD DO OTRS
+Nos widgets “Chamados Novos” e “Chamados Abertos”, deixe visíveis as colunas:
+- PROPRIETÁRIO: nome do técnico ou responsável pelo chamado;
+- BLOQUEAR: estado bloqueado ou desbloqueado.
 
-Exemplo:
+A coluna BLOQUEAR é necessária nos dois widgets para o FILA ME acompanhar o
+estado corretamente. O proprietário e o status de bloqueio são campos distintos.
 
-FilaME\
-├── FilaME.exe
-└── .env
-
-IMPORTANTE:
-Não compartilhe o arquivo .env.
-
-3. INSTALAR A EXTENSÃO
-
-Extraia o arquivo FilaME-Extensao.zip em uma pasta.
-
-Abra o Microsoft Edge e acesse:
-
-edge://extensions
-
-Ative:
-
-Developer mode
-
-Clique em:
-
-Load unpacked
-
-Selecione a pasta onde a extensão foi extraída.
-
-4. USAR O FILA ME
-
-Abra o OTRS normalmente.
-
-Depois execute:
-
-FilaME.exe
-
-Faça login com seu usuário.
-
-Pronto.
-
-REQUISITOS
-
-- Windows 10 ou Windows 11
-- Microsoft Edge
-- Acesso ao OTRS
-
-EM CASO DE PROBLEMAS
-
-Entre em contato com a equipe de desenvolvimento.
+USO
+Mantenha o FILA ME aberto enquanto utiliza o dashboard do OTRS. A extensão envia
+os dados do navegador para o aplicativo local neste computador.
