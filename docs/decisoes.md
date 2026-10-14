@@ -55,7 +55,7 @@
 **Exemplo:**
 `Admin OTRS`
 
-**Comportamento:** registrar Owner e preservar o estado atual.
+**Comportamento:** registrar Owner e não inferir cargo nem alterar a fila por causa da identidade desconhecida. Separadamente, se a atribuição estiver `AGUARDANDO_TECNICO`, a regra D016 pode atribuir o ticket a um técnico elegível.
 
 ---
 
@@ -120,3 +120,21 @@
 **Decisão:** decisões importantes devem existir no repositório, não apenas em conversas de ChatGPT.
 
 **Motivo:** Carlos e Luís usam chats/ambientes de IA separados.
+
+---
+
+## D016 — Reavaliar atribuições aguardando técnico
+
+**Decisão:** um ticket ativo já registrado como `AGUARDANDO_TECNICO` pode ser reavaliado quando for recebido novamente pela integração e houver técnico elegível.
+
+**Ordem:** processar o Owner primeiro. Se for reconhecido como Supervisão, confirmar como `SUPERVISAO` sem atribuí-lo à fila técnica. Se ainda estiver aguardando e houver técnico elegível, atribuir o próximo da fila na atribuição existente.
+
+**Proteções:** não criar ticket/atribuição duplicada; não varrer nem reintroduzir registros que não foram recebidos pela integração; usar o heartbeat e o bloqueio transacional da fila.
+
+---
+
+## D017 — Integração da V2 de interface
+
+**Decisão:** a V2 pode reorganizar aparência e navegação, mas não pode mover as regras de fila para o cliente nem remover contratos do backend sem revisão e migração explícitas.
+
+**Referência:** seguir o checklist em `integracao_v2.md`; ao concluir a integração, consolidar decisões permanentes nos documentos funcionais e remover o guia temporário se ele não tiver mais valor histórico.

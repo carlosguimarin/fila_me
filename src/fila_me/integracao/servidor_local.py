@@ -10,8 +10,8 @@ from src.fila_me.database.banco import (
     buscar_ultimas_atribuicoes,
     buscar_proximo_tecnico,
     atualizar_atribuicao_owner,
+    atribuir_ticket_aguardando,
 )
-
 
 HOST = "127.0.0.1"
 PORTA = 8765
@@ -247,6 +247,20 @@ class ServidorFilaME(
                             f"{resultado_owner['tipo_atribuicao']}"
                         )
 
+                resultado_aguardando = (
+                    atribuir_ticket_aguardando(
+                        numero_ticket
+                    )
+                )
+
+                if resultado_aguardando:
+                    print(
+                        f"Ticket aguardando atribuído: "
+                        f"{numero_ticket} "
+                        f"| Técnico: "
+                        f"{resultado_aguardando['tecnico']}"
+                    )
+
             print(
                 f"Tickets recebidos: "
                 f"{tickets}"
@@ -326,6 +340,12 @@ class ServidorFilaME(
                 )
             )
 
+            resultado_aguardando = (
+                atribuir_ticket_aguardando(
+                    ticket_id
+                )
+            )
+
             print(
                 f"Owner recebido: "
                 f"Ticket {ticket_id} "
@@ -343,6 +363,9 @@ class ServidorFilaME(
 
                 "atribuicao":
                     resultado,
+
+                "reatribuicao":
+                    resultado_aguardando,
             })
 
         except Exception as erro:

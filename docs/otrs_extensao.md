@@ -30,9 +30,11 @@ Um `Set` evita processar o mesmo número duas vezes dentro da mesma leitura da p
 
 ## 4. Owner
 
-O Owner é obtido da última célula (`td`) da linha do ticket.
+O código atual tenta obter o Owner da última célula (`td`) da linha do ticket, procurando um elemento `[title]`. Essa heurística **não é confiável em todos os casos**: foram encontrados valores como `bloqueado`, `desbloqueado`, categorias e títulos de chamados em `owner_otrs`.
 
-A implementação validada usa o elemento que possui `[title]` e lê:
+Esses valores não confirmam quem assumiu o ticket. Validar a extração contra o DOM real do OTRS antes de substituir a lógica atual.
+
+Implementação atual conhecida:
 
 ```javascript
 getAttribute("title")
@@ -79,9 +81,7 @@ chrome.runtime.sendMessage({
 
 A leitura é repetida aproximadamente a cada 5 segundos.
 
-Isso é esperado e NÃO significa que cada leitura deva criar uma nova atribuição.
-
-A proteção de duplicidade fica no banco.
+Isso não cria tickets/atribuições duplicados. Porém, se um ticket existente ainda estiver `AGUARDANDO_TECNICO`, o recebimento repetido pode reavaliar a atribuição existente no servidor/banco.
 
 ## 7. Comunicação
 

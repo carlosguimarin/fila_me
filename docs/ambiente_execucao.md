@@ -63,10 +63,23 @@ Para uma release:
 
 ## 5. Distribuição
 
-Plano futuro:
-- GitHub Release;
-- `FilaME.exe`;
-- ZIP da extensão.
+Distribuição atual definida pelo responsável:
+- `FilaME.exe` dentro de `dist`;
+- `.env` copiado para `dist` ao lado do `.exe`, mas mantido fora do ZIP;
+- `FilaME.zip` contém somente `FilaME.exe`;
+- extensão distribuída separadamente.
+
+Comandos definidos para build e ZIP:
+
+```powershell
+Remove-Item -Recurse -Force .\build
+Remove-Item -Recurse -Force .\dist
+pyinstaller .\FilaME.spec
+Copy-Item .\.env .\dist\.env
+Compress-Archive -Path .\dist\FilaME.exe -DestinationPath .\dist\FilaME.zip -Force
+```
+
+Não criar nova Release GitHub para cada atualização, salvo decisão posterior do responsável.
 
 Nunca incluir:
 - `.env`;

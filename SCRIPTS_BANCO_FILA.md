@@ -33,7 +33,7 @@ WHERE cargo = 'tecnico'
 ORDER BY id;
 ```
 
-Com heartbeat, o esperado é que `ultimo_heartbeat` seja atualizado periodicamente. Alterar `trabalhando = FALSE` manualmente não é permanente se o aplicativo do técnico continuar aberto e enviando heartbeat.
+Com heartbeat, `ultimo_heartbeat` deve ser atualizado periodicamente. A elegibilidade exige heartbeat nos últimos 15 segundos. Alterar `trabalhando = FALSE` manualmente não é permanente se o aplicativo do técnico continuar aberto e enviando heartbeat.
 
 ## 3. Consultar o estado atual da fila
 
@@ -49,7 +49,7 @@ Campo mais importante:
 
 ## 4. Ver o próximo técnico (consulta manual)
 
-Esta consulta calcula o próximo técnico usando os usuários marcados como ativos e trabalhando. Se o projeto estiver usando heartbeat na função Python, acrescente a condição de validade do heartbeat para reproduzir exatamente a lógica do app.
+Esta consulta calcula o próximo técnico usando os usuários ativos, trabalhando e com heartbeat válido, para reproduzir a elegibilidade usada pelo app.
 
 ```sql
 WITH tecnicos AS (
@@ -59,6 +59,7 @@ WITH tecnicos AS (
     WHERE cargo = 'tecnico'
       AND ativo = TRUE
       AND trabalhando = TRUE
+      AND ultimo_heartbeat >= CURRENT_TIMESTAMP - INTERVAL '15 seconds'
 ),
 ultimo AS (
     SELECT ultimo_tecnico_id
@@ -90,7 +91,7 @@ WHERE
     );
 ```
 
-> Esta consulta é para conferência manual. A lógica Python do app é a referência final, especialmente quando heartbeat estiver integrado.
+> Esta consulta é para conferência manual. A lógica Python do app é a referência final.
 
 ## 5. Consultar um chamado específico
 
@@ -109,6 +110,27 @@ SELECT
 FROM atribuicoes a
 WHERE a.numero_ticket = 2026100954000306;
 ```
+
+## 5.1 Atribuições pendentes no FILA
+
+```sql
+SELECT
+    numero_ticket,
+    tecnico,
+    owner_otrs,
+    status,
+    tipo_atribuicao,
+    atribuido_em,
+    confirmado_em
+FROM atribuicoes
+WHERE status = 'PENDENTE'
+  AND tipo_atribuicao = 'TECNICO'
+ORDER BY atribuido_em;
+```
+
+`PENDENTE` significa que a atribuição do FILA não foi confirmada na aplicação. **Não significa que o OTRS esteja aguardando confirmação de bloqueio.** `owner_otrs` pode conter extração incorreta; valores como `bloqueado`, `desbloqueado`, categorias ou assunto do ticket não comprovam o Owner real.
+
+`AGUARDANDO_TECNICO` é diferente: o ticket ainda não recebeu atribuição técnica. Se o ticket for recebido novamente pela integração, o Owner é processado e, se continuar aguardando e houver técnico elegível, o registro existente pode passar a `PENDENTE`.
 
 ## 6. Consultar chamado + estado atual da fila
 

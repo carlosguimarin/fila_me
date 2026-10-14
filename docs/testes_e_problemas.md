@@ -205,3 +205,26 @@ Os testes mais importantes confirmados:
 - cenário com somente um técnico trabalhando.
 
 Testes de release ainda precisam ser repetidos após a consolidação final da documentação e código.
+
+## 10. Reavaliação de tickets aguardando técnico
+
+### Comportamento atual no código
+
+`atribuir_ticket_aguardando(numero_ticket)` reavalia uma atribuição existente quando o servidor recebe o ticket pelos endpoints `/tickets` ou `/owner`. O Owner é processado antes da tentativa de reatribuição. Se a linha ainda estiver em `AGUARDANDO_TECNICO`, houver técnico elegível e o Owner/tipo não indicar Supervisão, a atribuição existente passa a `PENDENTE` para o próximo técnico e o ponteiro central da fila avança.
+
+### Verificações necessárias antes da distribuição
+
+Esse fluxo foi revisado estaticamente, mas o ciclo operacional ainda precisa ser confirmado com Neon e OTRS. Conferir pelo menos:
+
+1. Sem técnico elegível, o ticket permanece `AGUARDANDO_TECNICO`.
+2. Com técnico elegível, o mesmo ticket ativo muda para `PENDENTE` e recebe o próximo técnico.
+3. Polling repetido não cria registros nem avança a fila de novo para o mesmo ticket depois que ele sai de `AGUARDANDO_TECNICO`.
+4. Owner reconhecido como Supervisão é confirmado como `SUPERVISAO` e não consome vez.
+5. Dois computadores enviando o mesmo ticket simultaneamente não duplicam a atribuição nem escolhem a mesma vez incorretamente.
+6. Tickets removidos do OTRS/fantasmas não são reintroduzidos por uma varredura geral do banco.
+
+Não considerar a mudança validada em produção apenas pela conferência de sintaxe.
+
+## 11. Owner OTRS incorreto
+
+Valores como `bloqueado`, `desbloqueado`, categorias e títulos de chamados foram observados em `owner_otrs`. Esse campo não é evidência suficiente para concluir quem bloqueou/assumiu o ticket. Conferir no OTRS antes de corrigir dados em massa. Revisar a extração contra o DOM real antes de alterar a extensão.

@@ -319,6 +319,140 @@ def registrar_ticket_e_atribuir(numero_ticket):
         "status": "PENDENTE",
     }
 
+def atribuir_ticket_aguardando(numero_ticket):
+    with conectar() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    a.id,
+                    a.tipo_atribuicao,
+                    EXISTS (
+                        SELECT 1
+                        FROM usuarios u
+                        WHERE u.cargo = 'supervisao'
+                          AND u.ativo = TRUE
+                          AND LOWER(u.nome) =
+                              LOWER(COALESCE(a.owner_otrs, ''))
+                    ) AS owner_supervisao
+                FROM atribuicoes a
+                WHERE a.numero_ticket = %s
+                  AND a.status = 'AGUARDANDO_TECNICO'
+                FOR UPDATE OF a;
+                """,
+                (numero_ticket,),
+            )
+
+            atribuicao = cursor.fetchone()
+
+            if atribuicao is None:
+                conn.commit()
+                return None
+
+            (
+                atribuicao_id,
+                tipo_atribuicao,
+                owner_supervisao,
+            ) = atribuicao
+
+            # Uma atribuição de Supervisão nunca entra na fila de técnicos.
+            if (
+                tipo_atribuicao == "SUPERVISAO"
+                or owner_supervisao
+            ):
+                conn.commit()
+                return None
+
+            cursor.execute(
+                """
+                SELECT
+                    id,
+                    nome
+                FROM usuarios
+                WHERE cargo = 'tecnico'
+                  AND ativo = TRUE
+                  AND trabalhando = TRUE
+                  AND ultimo_heartbeat >=
+                      CURRENT_TIMESTAMP - INTERVAL '15 seconds'
+                ORDER BY id;
+                """
+            )
+            tecnicos = cursor.fetchall()
+
+            if not tecnicos:
+                conn.commit()
+                return None
+
+            cursor.execute(
+                """
+                SELECT ultimo_tecnico_id
+                FROM fila_estado
+                WHERE id = 1
+                FOR UPDATE;
+                """
+            )
+            resultado_fila = cursor.fetchone()
+
+            ultimo_tecnico_id = (
+                resultado_fila[0]
+                if resultado_fila
+                else None
+            )
+
+            tecnico_escolhido = None
+
+            if ultimo_tecnico_id is None:
+                tecnico_escolhido = tecnicos[0]
+            else:
+                for indice, tecnico in enumerate(tecnicos):
+                    if tecnico[0] == ultimo_tecnico_id:
+                        proximo_indice = (
+                            indice + 1
+                        ) % len(tecnicos)
+                        tecnico_escolhido = tecnicos[
+                            proximo_indice
+                        ]
+                        break
+
+                if tecnico_escolhido is None:
+                    tecnico_escolhido = tecnicos[0]
+
+            tecnico_id, tecnico_nome = tecnico_escolhido
+
+            cursor.execute(
+                """
+                UPDATE atribuicoes
+                SET
+                    tecnico = %s,
+                    status = 'PENDENTE',
+                    tipo_atribuicao = 'TECNICO',
+                    ultimo_tecnico_id_anterior = %s
+                WHERE id = %s;
+                """,
+                (
+                    tecnico_nome,
+                    ultimo_tecnico_id,
+                    atribuicao_id,
+                ),
+            )
+
+            cursor.execute(
+                """
+                UPDATE fila_estado
+                SET ultimo_tecnico_id = %s
+                WHERE id = 1;
+                """,
+                (tecnico_id,),
+            )
+
+        conn.commit()
+
+    return {
+        "numero_ticket": numero_ticket,
+        "tecnico": tecnico_nome,
+        "status": "PENDENTE",
+    }
+
 def buscar_ultimas_atribuicoes(limite=9):
     with conectar() as conn:
         with conn.cursor() as cursor:

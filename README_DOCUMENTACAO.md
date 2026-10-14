@@ -25,6 +25,7 @@ docs/
   seguranca.md
   testes_e_problemas.md
   ambiente_execucao.md
+  integracao_v2.md
 ```
 
 ## Instalação no projeto
