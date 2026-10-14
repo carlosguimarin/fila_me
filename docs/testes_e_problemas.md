@@ -205,3 +205,37 @@ Os testes mais importantes confirmados:
 - cenário com somente um técnico trabalhando.
 
 Testes de release ainda precisam ser repetidos após a consolidação final da documentação e código.
+
+## 10. Reavaliação de tickets aguardando técnico
+
+### Comportamento atual no código
+
+`atribuir_ticket_aguardando(numero_ticket)` reavalia uma atribuição existente quando o servidor recebe o ticket pelos endpoints `/tickets` ou `/owner`. O Owner é processado antes da tentativa de reatribuição. Se a linha ainda estiver em `AGUARDANDO_TECNICO`, houver técnico elegível e o Owner/tipo não indicar Supervisão, a atribuição existente passa a `PENDENTE` para o próximo técnico e o ponteiro central da fila avança.
+
+### Verificações necessárias antes da distribuição
+
+Esse fluxo foi revisado estaticamente, mas o ciclo operacional ainda precisa ser confirmado com Neon e OTRS. Conferir pelo menos:
+
+1. Sem técnico elegível, o ticket permanece `AGUARDANDO_TECNICO`.
+2. Com técnico elegível, o mesmo ticket ativo muda para `PENDENTE` e recebe o próximo técnico.
+3. Polling repetido não cria registros nem avança a fila de novo para o mesmo ticket depois que ele sai de `AGUARDANDO_TECNICO`.
+4. Owner reconhecido como Supervisão é confirmado como `SUPERVISAO` e não consome vez.
+5. Dois computadores enviando o mesmo ticket simultaneamente não duplicam a atribuição nem escolhem a mesma vez incorretamente.
+6. Tickets removidos do OTRS/fantasmas não são reintroduzidos por uma varredura geral do banco.
+
+Não considerar a mudança validada em produção apenas pela conferência de sintaxe.
+
+## 11. Owner e bloqueio OTRS — correção de código pendente de validação operacional
+
+Valores como `bloqueado`, `desbloqueado`, categorias e títulos de chamados foram observados em `owner_otrs` com a heurística antiga da última célula. A extensão foi alterada para extrair `PROPRIETÁRIO` e `BLOQUEAR` por cabeçalho e encaminhar o bloqueio separadamente. Validar a correspondência das colunas nos widgets `Chamados Novos` e `Chamados Abertos`; não corrigir registros antigos em massa nem inferir quem bloqueou pelo valor `bloqueado`.
+
+O primeiro bloqueio observado agora é persistido em `tickets.bloqueio_confirmado`, com timestamp `bloqueado_em`, e a barra do painel usa verde. Leituras de `desbloqueado` não removem a confirmação. O fluxo ainda precisa de validação operacional com a extensão atualizada e o servidor conectado ao Neon.
+
+## 12. Integração visual V2 na branch `luis` — 2026-10-14
+
+- Testes isolados de `buscar_painel_visual()` e encerramento da janela: passaram com `python -m unittest tests.test_integracao_v2 -v`, usando mocks, sem acesso ao Neon.
+- Execução manual relatada por Luís: a aplicação abriu, o servidor local iniciou em `127.0.0.1:8765` e recebeu polls da extensão. O ticket mostrado no log já existia (`Tickets novos: []`); esse teste não comprova atribuição de ticket novo nem o ciclo completo de presença/Owner.
+- Compilação de sintaxe de `src/fila_me`: passou com `compileall`.
+- Revisão estática: servidor local, extensão OTRS, schema e rotinas de atribuição/Owner não foram copiados do ZIP V2.
+- Pendente: abrir a nova UI com as dependências instaladas, testar login/cadastro, tema, menus, histórico, presença, encerramento, Neon/OTRS e build do executável no ambiente operacional.
+- Diferença identificada: a V1 altera `atribuicoes.tecnico` quando outro técnico assume, enquanto a documentação o descreve como atribuição provisória separada do Owner. Por decisão do responsável, o comportamento funcional da V1 foi mantido nesta integração visual.

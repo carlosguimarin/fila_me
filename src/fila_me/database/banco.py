@@ -1,10 +1,7 @@
 import os
 import sys
-
 import psycopg
 from dotenv import load_dotenv
-
-
 if getattr(sys, "frozen", False):
     BASE_DIR = os.path.dirname(sys.executable)
 else:
@@ -16,46 +13,50 @@ else:
             "..",
         )
     )
-
-
 ARQUIVO_ENV = os.path.join(
     BASE_DIR,
     ".env",
 )
-
-
 load_dotenv(ARQUIVO_ENV)
-
-
 DATABASE_URL = os.getenv("DATABASE_URL")
 
-
 def conectar():
-
     if not DATABASE_URL:
         raise RuntimeError(
             "DATABASE_URL não encontrada no arquivo .env"
         )
-
     return psycopg.connect(
         DATABASE_URL
     )
 
-
 def criar_tabelas():
-
     with conectar() as conn:
-
         with conn.cursor() as cursor:
-
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS tickets (
                     numero_ticket BIGINT PRIMARY KEY,
                     criado_em TIMESTAMP
-                        DEFAULT CURRENT_TIMESTAMP
+                        DEFAULT CURRENT_TIMESTAMP,
+                    status_bloqueio VARCHAR(20),
+                    bloqueio_confirmado BOOLEAN NOT NULL DEFAULT FALSE,
+                    bloqueado_em TIMESTAMP
                 );
             """)
-
+            cursor.execute("""
+                ALTER TABLE tickets
+                ADD COLUMN IF NOT EXISTS
+                status_bloqueio VARCHAR(20);
+            """)
+            cursor.execute("""
+                ALTER TABLE tickets
+                ADD COLUMN IF NOT EXISTS
+                bloqueio_confirmado BOOLEAN NOT NULL DEFAULT FALSE;
+            """)
+            cursor.execute("""
+                ALTER TABLE tickets
+                ADD COLUMN IF NOT EXISTS
+                bloqueado_em TIMESTAMP;
+            """)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS fila_estado (
                     id INTEGER PRIMARY KEY,
@@ -63,7 +64,6 @@ def criar_tabelas():
                     ultimo_tecnico_id BIGINT
                 );
             """)
-
             cursor.execute("""
                 INSERT INTO fila_estado (
                     id,
@@ -73,13 +73,11 @@ def criar_tabelas():
                 VALUES (1, 0, NULL)
                 ON CONFLICT (id) DO NOTHING;
             """)
-
             cursor.execute("""
                 ALTER TABLE fila_estado
                 ADD COLUMN IF NOT EXISTS
                 ultimo_tecnico_id BIGINT;
             """)
-
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS atribuicoes (
                     id BIGSERIAL PRIMARY KEY,
@@ -93,41 +91,41 @@ def criar_tabelas():
                     owner_otrs VARCHAR(150),
                     confirmado_em TIMESTAMP,
                     tipo_atribuicao VARCHAR(30)
-                        NOT NULL DEFAULT 'TECNICO'
+                        NOT NULL DEFAULT 'TECNICO',
+                    ultimo_tecnico_id_anterior BIGINT
                 );
             """)
-
             cursor.execute("""
                 ALTER TABLE atribuicoes
                 ALTER COLUMN tecnico DROP NOT NULL;
             """)
-
             cursor.execute("""
                 ALTER TABLE atribuicoes
                 ADD COLUMN IF NOT EXISTS
                 status VARCHAR(30)
                 NOT NULL DEFAULT 'PENDENTE';
             """)
-
             cursor.execute("""
                 ALTER TABLE atribuicoes
                 ADD COLUMN IF NOT EXISTS
                 owner_otrs VARCHAR(150);
             """)
-
             cursor.execute("""
                 ALTER TABLE atribuicoes
                 ADD COLUMN IF NOT EXISTS
                 confirmado_em TIMESTAMP;
             """)
-
             cursor.execute("""
                 ALTER TABLE atribuicoes
                 ADD COLUMN IF NOT EXISTS
                 tipo_atribuicao VARCHAR(30)
                 NOT NULL DEFAULT 'TECNICO';
             """)
-
+            cursor.execute("""
+                ALTER TABLE atribuicoes
+                ADD COLUMN IF NOT EXISTS
+                ultimo_tecnico_id_anterior BIGINT;
+            """)
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS usuarios (
                     id BIGSERIAL PRIMARY KEY,
@@ -147,21 +145,19 @@ def criar_tabelas():
                         DEFAULT CURRENT_TIMESTAMP
                 );
             """)
-
+            cursor.execute("""
+                ALTER TABLE usuarios
+                ADD COLUMN IF NOT EXISTS
+                ultimo_heartbeat TIMESTAMP;
+            """)
         conn.commit()
-
 
 def criar_tabela_tickets():
-
     criar_tabelas()
 
-
 def registrar_ticket(numero_ticket):
-
     with conectar() as conn:
-
         with conn.cursor() as cursor:
-
             cursor.execute(
                 """
                 INSERT INTO tickets (
@@ -173,22 +169,17 @@ def registrar_ticket(numero_ticket):
                 ) DO NOTHING
                 RETURNING numero_ticket;
                 """,
-                (numero_ticket,),
+                (
+                    numero_ticket,
+                ),
             )
-
             resultado = cursor.fetchone()
-
         conn.commit()
-
     return resultado is not None
 
-
 def buscar_tecnicos_trabalhando():
-
     with conectar() as conn:
-
         with conn.cursor() as cursor:
-
             cursor.execute(
                 """
                 SELECT
@@ -198,19 +189,15 @@ def buscar_tecnicos_trabalhando():
                 WHERE cargo = 'tecnico'
                   AND ativo = TRUE
                   AND trabalhando = TRUE
+                  AND ultimo_heartbeat >= CURRENT_TIMESTAMP - INTERVAL '15 seconds'
                 ORDER BY id;
                 """
             )
-
             return cursor.fetchall()
 
-
 def registrar_ticket_e_atribuir(numero_ticket):
-
     with conectar() as conn:
-
         with conn.cursor() as cursor:
-
             cursor.execute(
                 """
                 INSERT INTO tickets (
@@ -222,17 +209,14 @@ def registrar_ticket_e_atribuir(numero_ticket):
                 ) DO NOTHING
                 RETURNING numero_ticket;
                 """,
-                (numero_ticket,),
+                (
+                    numero_ticket,
+                ),
             )
-
             ticket_novo = cursor.fetchone()
-
             if ticket_novo is None:
-
                 conn.commit()
-
                 return None
-
             cursor.execute(
                 """
                 SELECT
@@ -242,14 +226,12 @@ def registrar_ticket_e_atribuir(numero_ticket):
                 WHERE cargo = 'tecnico'
                   AND ativo = TRUE
                   AND trabalhando = TRUE
+                  AND ultimo_heartbeat >= CURRENT_TIMESTAMP - INTERVAL '15 seconds'
                 ORDER BY id;
                 """
             )
-
             tecnicos = cursor.fetchall()
-
             if not tecnicos:
-
                 cursor.execute(
                     """
                     INSERT INTO atribuicoes (
@@ -265,17 +247,16 @@ def registrar_ticket_e_atribuir(numero_ticket):
                         'TECNICO'
                     );
                     """,
-                    (numero_ticket,),
+                    (
+                        numero_ticket,
+                    ),
                 )
-
                 conn.commit()
-
                 return {
                     "numero_ticket": numero_ticket,
                     "tecnico": None,
                     "status": "AGUARDANDO_TECNICO",
                 }
-
             cursor.execute(
                 """
                 SELECT
@@ -285,76 +266,241 @@ def registrar_ticket_e_atribuir(numero_ticket):
                 FOR UPDATE;
                 """
             )
-
             ultimo = cursor.fetchone()
-
             ultimo_tecnico_id = (
                 ultimo[0]
                 if ultimo
                 else None
             )
-
+            ultimo_tecnico_id_anterior = (
+                ultimo_tecnico_id
+            )
             tecnico_escolhido = None
-
             if ultimo_tecnico_id is None:
-
                 tecnico_escolhido = tecnicos[0]
-
             else:
-
                 for indice, tecnico in enumerate(
                     tecnicos
                 ):
-
                     if tecnico[0] == ultimo_tecnico_id:
-
                         proximo_indice = (
                             indice + 1
                         ) % len(tecnicos)
-
                         tecnico_escolhido = (
                             tecnicos[
                                 proximo_indice
                             ]
                         )
-
                         break
-
                 if tecnico_escolhido is None:
-
                     tecnico_escolhido = tecnicos[0]
-
             tecnico_id = tecnico_escolhido[0]
             tecnico_nome = tecnico_escolhido[1]
-
             cursor.execute(
                 """
                 INSERT INTO atribuicoes (
                     numero_ticket,
                     tecnico,
                     status,
-                    tipo_atribuicao
+                    tipo_atribuicao,
+                    ultimo_tecnico_id_anterior
                 )
                 VALUES (
                     %s,
                     %s,
                     'PENDENTE',
-                    'TECNICO'
+                    'TECNICO',
+                    %s
                 );
                 """,
                 (
                     numero_ticket,
                     tecnico_nome,
+                    ultimo_tecnico_id_anterior,
                 ),
             )
-
-            # A FILA é movimentada somente aqui,
-            # no momento da atribuição inicial.
             cursor.execute(
                 """
                 UPDATE fila_estado
                 SET
                     ultimo_tecnico_id = %s
+                WHERE id = 1;
+                """,
+                (
+                    tecnico_id,
+                ),
+            )
+        conn.commit()
+    return {
+        "numero_ticket": numero_ticket,
+        "tecnico": tecnico_nome,
+        "status": "PENDENTE",
+    }
+
+def registrar_status_bloqueio(numero_ticket, status_bloqueio):
+    """Registra o estado OTRS atual e preserva a primeira confirmação de bloqueio."""
+    if not isinstance(status_bloqueio, str):
+        return None
+
+    status_bloqueio = status_bloqueio.strip().casefold()
+    if status_bloqueio not in ("bloqueado", "desbloqueado"):
+        return None
+
+    with conectar() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE tickets
+                SET status_bloqueio = %s,
+                    bloqueio_confirmado =
+                        bloqueio_confirmado OR %s = 'bloqueado',
+                    bloqueado_em = CASE
+                        WHEN %s = 'bloqueado'
+                            THEN COALESCE(bloqueado_em, CURRENT_TIMESTAMP)
+                        ELSE bloqueado_em
+                    END
+                WHERE numero_ticket = %s
+                RETURNING numero_ticket, status_bloqueio,
+                          bloqueio_confirmado;
+                """,
+                (
+                    status_bloqueio,
+                    status_bloqueio,
+                    status_bloqueio,
+                    numero_ticket,
+                ),
+            )
+            linha = cursor.fetchone()
+        conn.commit()
+    if linha is None:
+        return None
+    return {
+        "numero_ticket": linha[0],
+        "status_bloqueio": linha[1],
+        "bloqueio_confirmado": bool(linha[2]),
+    }
+
+def atribuir_ticket_aguardando(numero_ticket):
+    with conectar() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                SELECT
+                    a.id,
+                    a.tipo_atribuicao,
+                    EXISTS (
+                        SELECT 1
+                        FROM usuarios u
+                        WHERE u.cargo = 'supervisao'
+                          AND u.ativo = TRUE
+                          AND LOWER(u.nome) =
+                              LOWER(COALESCE(a.owner_otrs, ''))
+                    ) AS owner_supervisao
+                FROM atribuicoes a
+                WHERE a.numero_ticket = %s
+                  AND a.status = 'AGUARDANDO_TECNICO'
+                FOR UPDATE OF a;
+                """,
+                (numero_ticket,),
+            )
+
+            atribuicao = cursor.fetchone()
+
+            if atribuicao is None:
+                conn.commit()
+                return None
+
+            (
+                atribuicao_id,
+                tipo_atribuicao,
+                owner_supervisao,
+            ) = atribuicao
+
+            # Uma atribuição de Supervisão nunca entra na fila de técnicos.
+            if (
+                tipo_atribuicao == "SUPERVISAO"
+                or owner_supervisao
+            ):
+                conn.commit()
+                return None
+
+            cursor.execute(
+                """
+                SELECT
+                    id,
+                    nome
+                FROM usuarios
+                WHERE cargo = 'tecnico'
+                  AND ativo = TRUE
+                  AND trabalhando = TRUE
+                  AND ultimo_heartbeat >=
+                      CURRENT_TIMESTAMP - INTERVAL '15 seconds'
+                ORDER BY id;
+                """
+            )
+            tecnicos = cursor.fetchall()
+
+            if not tecnicos:
+                conn.commit()
+                return None
+
+            cursor.execute(
+                """
+                SELECT ultimo_tecnico_id
+                FROM fila_estado
+                WHERE id = 1
+                FOR UPDATE;
+                """
+            )
+            resultado_fila = cursor.fetchone()
+
+            ultimo_tecnico_id = (
+                resultado_fila[0]
+                if resultado_fila
+                else None
+            )
+
+            tecnico_escolhido = None
+
+            if ultimo_tecnico_id is None:
+                tecnico_escolhido = tecnicos[0]
+            else:
+                for indice, tecnico in enumerate(tecnicos):
+                    if tecnico[0] == ultimo_tecnico_id:
+                        proximo_indice = (
+                            indice + 1
+                        ) % len(tecnicos)
+                        tecnico_escolhido = tecnicos[
+                            proximo_indice
+                        ]
+                        break
+
+                if tecnico_escolhido is None:
+                    tecnico_escolhido = tecnicos[0]
+
+            tecnico_id, tecnico_nome = tecnico_escolhido
+
+            cursor.execute(
+                """
+                UPDATE atribuicoes
+                SET
+                    tecnico = %s,
+                    status = 'PENDENTE',
+                    tipo_atribuicao = 'TECNICO',
+                    ultimo_tecnico_id_anterior = %s
+                WHERE id = %s;
+                """,
+                (
+                    tecnico_nome,
+                    ultimo_tecnico_id,
+                    atribuicao_id,
+                ),
+            )
+
+            cursor.execute(
+                """
+                UPDATE fila_estado
+                SET ultimo_tecnico_id = %s
                 WHERE id = 1;
                 """,
                 (tecnico_id,),
@@ -368,13 +514,9 @@ def registrar_ticket_e_atribuir(numero_ticket):
         "status": "PENDENTE",
     }
 
-
 def buscar_ultimas_atribuicoes(limite=9):
-
     with conectar() as conn:
-
         with conn.cursor() as cursor:
-
             cursor.execute(
                 """
                 SELECT
@@ -391,24 +533,90 @@ def buscar_ultimas_atribuicoes(limite=9):
                 ORDER BY id DESC
                 LIMIT %s;
                 """,
-                (limite,),
+                (
+                    limite,
+                ),
             )
-
             return cursor.fetchall()
 
 
-def buscar_proximo_tecnico():
-
-    tecnicos = buscar_tecnicos_trabalhando()
-
-    if not tecnicos:
-
-        return "Nenhum técnico"
-
+def buscar_painel_visual(usuario, filtro="todos"):
+    """Dados de apresentação; a decisão da fila permanece nas funções existentes."""
+    if filtro not in ("todos", "meus"):
+        raise ValueError("Filtro inválido")
     with conectar() as conn:
-
         with conn.cursor() as cursor:
+            if filtro == "meus":
+                cursor.execute(
+                    """
+                    SELECT a.numero_ticket, a.tecnico, a.atribuido_em, a.status,
+                           CASE
+                               WHEN EXISTS (
+                                   SELECT 1 FROM usuarios u
+                                   WHERE LOWER(u.nome) = LOWER(a.owner_otrs)
+                                     AND u.ativo = TRUE
+                               ) THEN a.owner_otrs
+                               ELSE 'Admin OTRS'
+                           END AS owner_otrs,
+                           a.tipo_atribuicao,
+                           t.status_bloqueio, t.bloqueio_confirmado
+                    FROM atribuicoes a
+                    LEFT JOIN tickets t ON t.numero_ticket = a.numero_ticket
+                    WHERE LOWER(a.tecnico) = LOWER(%s)
+                      AND a.tipo_atribuicao <> 'SUPERVISAO'
+                    ORDER BY a.id DESC;
+                    """,
+                    (usuario["nome"],),
+                )
+            else:
+                cursor.execute(
+                    """
+                    SELECT a.numero_ticket, a.tecnico, a.atribuido_em, a.status,
+                           CASE
+                               WHEN EXISTS (
+                                   SELECT 1 FROM usuarios u
+                                   WHERE LOWER(u.nome) = LOWER(a.owner_otrs)
+                                     AND u.ativo = TRUE
+                               ) THEN a.owner_otrs
+                               ELSE 'Admin OTRS'
+                           END AS owner_otrs,
+                           a.tipo_atribuicao,
+                           t.status_bloqueio, t.bloqueio_confirmado
+                    FROM atribuicoes a
+                    LEFT JOIN tickets t ON t.numero_ticket = a.numero_ticket
+                    ORDER BY a.id DESC;
+                    """
+                )
+            linhas = cursor.fetchall()
+    historico = [
+        {
+            "numero_ticket": numero,
+            "tecnico": tecnico,
+            "atribuido_em": data,
+            "status": status,
+            "owner_otrs": owner,
+            "tipo_atribuicao": tipo,
+            "status_bloqueio": status_bloqueio,
+            "bloqueio_confirmado": bool(bloqueio_confirmado),
+            "meu": tipo != "SUPERVISAO" and bool(tecnico)
+                   and tecnico.casefold() == usuario["nome"].casefold(),
+        }
+        for numero, tecnico, data, status, owner, tipo, status_bloqueio,
+        bloqueio_confirmado in linhas
+    ]
+    online = [
+        {"id": identificador, "nome": nome, "cargo": "tecnico", "trabalhando": True}
+        for identificador, nome in buscar_tecnicos_trabalhando()
+    ]
+    return {"proximo": buscar_proximo_tecnico(), "historico": historico, "online": online}
 
+
+def buscar_proximo_tecnico():
+    tecnicos = buscar_tecnicos_trabalhando()
+    if not tecnicos:
+        return "Nenhum técnico"
+    with conectar() as conn:
+        with conn.cursor() as cursor:
             cursor.execute(
                 """
                 SELECT
@@ -417,35 +625,25 @@ def buscar_proximo_tecnico():
                 WHERE id = 1;
                 """
             )
-
             resultado = cursor.fetchone()
-
     ultimo_id = (
         resultado[0]
         if resultado
         else None
     )
-
     if ultimo_id is None:
-
         return tecnicos[0][1]
-
     for indice, tecnico in enumerate(
         tecnicos
     ):
-
         if tecnico[0] == ultimo_id:
-
             proximo_indice = (
                 indice + 1
             ) % len(tecnicos)
-
             return tecnicos[
                 proximo_indice
             ][1]
-
     return tecnicos[0][1]
-
 
 def criar_usuario(
     nome,
@@ -453,36 +651,26 @@ def criar_usuario(
     senha_hash,
     cargo,
 ):
-
     nome = nome.strip()
     email = email.strip().lower()
     cargo = cargo.strip().lower()
-
     if not nome:
-
         raise ValueError(
             "Nome é obrigatório."
         )
-
     if not email:
-
         raise ValueError(
             "E-mail é obrigatório."
         )
-
     if cargo not in (
         "tecnico",
         "supervisao",
     ):
-
         raise ValueError(
             "Cargo inválido."
         )
-
     with conectar() as conn:
-
         with conn.cursor() as cursor:
-
             cursor.execute(
                 """
                 INSERT INTO usuarios (
@@ -512,22 +700,14 @@ def criar_usuario(
                     cargo,
                 ),
             )
-
             usuario = cursor.fetchone()
-
         conn.commit()
-
     return usuario
 
-
 def buscar_usuario_por_email(email):
-
     email = email.strip().lower()
-
     with conectar() as conn:
-
         with conn.cursor() as cursor:
-
             cursor.execute(
                 """
                 SELECT
@@ -541,101 +721,116 @@ def buscar_usuario_por_email(email):
                 FROM usuarios
                 WHERE email = %s;
                 """,
-                (email,),
+                (
+                    email,
+                ),
             )
-
             return cursor.fetchone()
-
 
 def atualizar_status_trabalhando(
     usuario_id,
     trabalhando,
 ):
-
     with conectar() as conn:
-
         with conn.cursor() as cursor:
-
             cursor.execute(
                 """
                 UPDATE usuarios
-                SET trabalhando = %s
+                SET
+                    trabalhando = %s,
+                    ultimo_heartbeat = CASE
+                        WHEN %s = TRUE THEN CURRENT_TIMESTAMP
+                        ELSE NULL
+                    END
                 WHERE id = %s;
                 """,
                 (
                     trabalhando,
+                    trabalhando,
                     usuario_id,
                 ),
             )
-
         conn.commit()
 
+def atualizar_heartbeat(usuario_id):
+    with conectar() as conn:
+        with conn.cursor() as cursor:
+            cursor.execute(
+                """
+                UPDATE usuarios
+                SET
+                    trabalhando = TRUE,
+                    ultimo_heartbeat = CURRENT_TIMESTAMP
+                WHERE id = %s
+                  AND cargo = 'tecnico'
+                  AND ativo = TRUE;
+                """,
+                (
+                    usuario_id,
+                ),
+            )
+        conn.commit()
 
 def atualizar_atribuicao_owner(
     numero_ticket,
     owner,
 ):
-
     if owner:
-
         owner = owner.strip()
-
     with conectar() as conn:
-
         with conn.cursor() as cursor:
-
             cursor.execute(
                 """
                 SELECT
                     a.id,
                     a.tecnico,
                     a.status,
-                    a.tipo_atribuicao
+                    a.tipo_atribuicao,
+                    a.ultimo_tecnico_id_anterior
                 FROM atribuicoes a
                 WHERE a.numero_ticket = %s
                 FOR UPDATE;
                 """,
-                (numero_ticket,),
+                (
+                    numero_ticket,
+                ),
             )
-
             atribuicao = cursor.fetchone()
-
             if atribuicao is None:
-
                 conn.commit()
-
                 return None
-
             (
                 atribuicao_id,
                 tecnico_atribuido,
                 status_atual,
                 tipo_atribuicao,
+                ultimo_tecnico_id_anterior,
             ) = atribuicao
-
             cursor.execute(
                 """
                 SELECT
                     id,
                     nome,
-                    cargo
+                    cargo,
+                    COALESCE(
+                    trabalhando
+                    AND ultimo_heartbeat >= CURRENT_TIMESTAMP - INTERVAL '15 seconds',
+                    FALSE
+                ) AS trabalhando
                 FROM usuarios
                 WHERE LOWER(nome) = LOWER(%s)
                   AND ativo = TRUE
                 LIMIT 1;
                 """,
-                (owner,),
+                (
+                    owner,
+                ),
             )
-
             usuario_owner = cursor.fetchone()
-
-            # Owner não cadastrado.
-            # Exemplo: Admin OTRS.
-            #
-            # Apenas registra o Owner.
-            # A fila NÃO é alterada.
+            # Owner não cadastrado: guarda somente o valor sentinela
+            # "Admin OTRS". A fila não é alterada.
             if usuario_owner is None:
-
+                owner = "Admin OTRS"
                 cursor.execute(
                     """
                     UPDATE atribuicoes
@@ -648,9 +843,7 @@ def atualizar_atribuicao_owner(
                         atribuicao_id,
                     ),
                 )
-
                 conn.commit()
-
                 return {
                     "numero_ticket": numero_ticket,
                     "tecnico": tecnico_atribuido,
@@ -658,20 +851,35 @@ def atualizar_atribuicao_owner(
                     "status": status_atual,
                     "tipo_atribuicao": tipo_atribuicao,
                 }
-
             (
                 owner_id,
                 owner_nome,
                 owner_cargo,
+                owner_trabalhando,
             ) = usuario_owner
-
-            # Supervisor assumiu.
+            # Supervisão é CORINGA.
             #
-            # Não consome a vez.
-            # Não devolve a vez.
-            # Não altera fila_estado.
+            # Se o chamado ainda estava PENDENTE,
+            # a atribuição inicial movimentou a fila.
+            #
+            # Supervisão não consome essa vez.
+            # Portanto, restauramos o estado anterior.
             if owner_cargo == "supervisao":
-
+                if (
+                    status_atual == "PENDENTE"
+                    and tipo_atribuicao == "TECNICO"
+                ):
+                    cursor.execute(
+                        """
+                        UPDATE fila_estado
+                        SET
+                            ultimo_tecnico_id = %s
+                        WHERE id = 1;
+                        """,
+                        (
+                            ultimo_tecnico_id_anterior,
+                        ),
+                    )
                 cursor.execute(
                     """
                     UPDATE atribuicoes
@@ -688,7 +896,6 @@ def atualizar_atribuicao_owner(
                         atribuicao_id,
                     ),
                 )
-
                 resultado = {
                     "numero_ticket": numero_ticket,
                     "tecnico": tecnico_atribuido,
@@ -696,24 +903,19 @@ def atualizar_atribuicao_owner(
                     "status": "CONFIRMADO",
                     "tipo_atribuicao": "SUPERVISAO",
                 }
-
                 conn.commit()
-
                 return resultado
-
-            # O técnico originalmente atribuído
-            # é o mesmo Owner do OTRS.
+            # O técnico originalmente atribuído confirmou.
             #
-            # A vez já foi consumida na atribuição inicial.
-            # Portanto, não fazemos nenhuma alteração
-            # em fila_estado.
+            # Nesse caso sabemos que ele realmente assumiu
+            # o chamado. A vez já havia sido consumida
+            # na atribuição inicial.
             if (
-                tecnico_atribuido
-                and
-                tecnico_atribuido.lower()
+                owner_cargo == "tecnico"
+                and tecnico_atribuido
+                and tecnico_atribuido.lower()
                 == owner_nome.lower()
             ):
-
                 cursor.execute(
                     """
                     UPDATE atribuicoes
@@ -730,7 +932,6 @@ def atualizar_atribuicao_owner(
                         atribuicao_id,
                     ),
                 )
-
                 resultado = {
                     "numero_ticket": numero_ticket,
                     "tecnico": owner_nome,
@@ -738,17 +939,93 @@ def atualizar_atribuicao_owner(
                     "status": "CONFIRMADO",
                     "tipo_atribuicao": "TECNICO",
                 }
-
                 conn.commit()
-
                 return resultado
-
-            # Outro técnico assumiu fora da vez.
+            # Outro técnico assumiu o chamado.
             #
-            # Registramos quem realmente assumiu,
-            # mas NÃO alteramos a fila.
+            # Somente um técnico que esteja realmente
+            # trabalhando pode consumir a vez.
+            #
+            # Se ele estiver fora da vez, a fila permanece.
             if owner_cargo == "tecnico":
-
+                cursor.execute(
+                    """
+                    SELECT
+                        ultimo_tecnico_id
+                    FROM fila_estado
+                    WHERE id = 1
+                    FOR UPDATE;
+                    """
+                )
+                fila = cursor.fetchone()
+                ultimo_id_atual = (
+                    fila[0]
+                    if fila
+                    else None
+                )
+                cursor.execute(
+                    """
+                    SELECT
+                        id,
+                        nome
+                    FROM usuarios
+                    WHERE cargo = 'tecnico'
+                      AND ativo = TRUE
+                      AND trabalhando = TRUE
+                      AND ultimo_heartbeat >= CURRENT_TIMESTAMP - INTERVAL '15 seconds'
+                    ORDER BY id;
+                    """
+                )
+                tecnicos = cursor.fetchall()
+                proximo_tecnico_id = None
+                if tecnicos:
+                    if ultimo_id_atual is None:
+                        proximo_tecnico_id = (
+                            tecnicos[0][0]
+                        )
+                    else:
+                        for indice, tecnico in enumerate(
+                            tecnicos
+                        ):
+                            if (
+                                tecnico[0]
+                                == ultimo_id_atual
+                            ):
+                                proximo_indice = (
+                                    indice + 1
+                                ) % len(tecnicos)
+                                proximo_tecnico_id = (
+                                    tecnicos[
+                                        proximo_indice
+                                    ][0]
+                                )
+                                break
+                        if proximo_tecnico_id is None:
+                            proximo_tecnico_id = (
+                                tecnicos[0][0]
+                            )
+                # Se o técnico que assumiu está trabalhando
+                # e é exatamente o próximo da fila,
+                # ele consome a vez.
+                if (
+                    owner_trabalhando
+                    and
+                    status_atual == "PENDENTE"
+                    and
+                    owner_id
+                    == proximo_tecnico_id
+                ):
+                    cursor.execute(
+                        """
+                        UPDATE fila_estado
+                        SET
+                            ultimo_tecnico_id = %s
+                        WHERE id = 1;
+                        """,
+                        (
+                            owner_id,
+                        ),
+                    )
                 cursor.execute(
                     """
                     UPDATE atribuicoes
@@ -767,7 +1044,6 @@ def atualizar_atribuicao_owner(
                         atribuicao_id,
                     ),
                 )
-
                 resultado = {
                     "numero_ticket": numero_ticket,
                     "tecnico": owner_nome,
@@ -775,12 +1051,9 @@ def atualizar_atribuicao_owner(
                     "status": "CONFIRMADO",
                     "tipo_atribuicao": "TECNICO",
                 }
-
                 conn.commit()
-
                 return resultado
-
-            # Segurança para qualquer cargo inesperado.
+            # Segurança para cargo inesperado.
             cursor.execute(
                 """
                 UPDATE atribuicoes
@@ -793,9 +1066,7 @@ def atualizar_atribuicao_owner(
                     atribuicao_id,
                 ),
             )
-
         conn.commit()
-
     return {
         "numero_ticket": numero_ticket,
         "tecnico": tecnico_atribuido,

@@ -1,226 +1,85 @@
 import tkinter as tk
 from tkinter import messagebox
 
-from src.fila_me.database.autenticacao import (
-    autenticar_usuario,
-)
-
-from src.fila_me.ui.estilos import (
-    COR_FUNDO,
-    COR_TEXTO,
-    COR_SECUNDARIO,
-    COR_DESTAQUE,
-    FONTE_PADRAO,
-)
+from src.fila_me.database.autenticacao import autenticar_usuario
+from src.fila_me.ui.componentes import botao, ajustar_tamanho
+from src.fila_me.ui.estilos import TEMAS, FONTE_PADRAO, cor_destaque, cor_texto_botao
 
 
 class TelaLogin:
+    def __init__(self, root, ao_logar, ao_cadastrar, executor, aparencia=None):
+        self.root, self.ao_logar, self.executor = root, ao_logar, executor
+        self.aparencia = aparencia or {"tema": "escuro", "cor": "#FF626B"}
+        self.ativo = True
+        self.c = TEMAS[self.aparencia["tema"]]
+        root.title("Fila ME • Entrar")
+        ajustar_tamanho(root, 360, 360, (340, 350))
+        root.resizable(True, True)
+        root.configure(bg=self.c["fundo"])
+        self.frame = tk.Frame(root, bg=self.c["fundo"])
+        self.frame.pack(fill="both", expand=True, padx=30, pady=24)
+        self.label("Fila ME", 24, True).pack(pady=(0, 18))
+        self.identificacao_entry = self.campo("Login")
+        self.senha_entry = self.campo("Senha", senha=True)
+        self.entrar_btn = botao(self.frame, "Entrar", self.entrar, self.c, destaque=True)
+        self.entrar_btn.pack(fill="x", pady=(16, 8))
+        self.cadastro_btn = botao(self.frame, "Criar cadastro", ao_cadastrar, self.c)
+        self.cadastro_btn.pack(fill="x")
+        self.aplicar_cor()
+        self.identificacao_entry.focus_set()
+        self.identificacao_entry.bind("<Return>", self.ir_para_senha)
+        self.senha_entry.bind("<Return>", lambda e: self.entrar())
 
-    def __init__(
-        self,
-        root,
-        ao_logar,
-        ao_cadastrar,
-    ):
+    def ir_para_senha(self, evento=None):
+        self.senha_entry.focus_set()
+        return "break"
 
-        self.root = root
-        self.ao_logar = ao_logar
-        self.ao_cadastrar = ao_cadastrar
+    def label(self, texto, tamanho=10, bold=False):
+        return tk.Label(self.frame, text=texto, bg=self.c["fundo"],
+                        fg=self.c["texto"] if bold else self.c["secundario"],
+                        font=(FONTE_PADRAO, tamanho, "bold" if bold else "normal"))
 
-        self.criar_interface()
+    def campo(self, texto, senha=False):
+        self.label(texto, 9).pack(anchor="w", pady=(8, 4))
+        entry = tk.Entry(self.frame, show="•" if senha else "", bg=self.c["campo"],
+                         fg=self.c["texto"], insertbackground=self.c["texto"], relief="flat",
+                         highlightthickness=1, highlightbackground=self.c["borda"],
+                         highlightcolor=self.c["azul"], font=(FONTE_PADRAO, 11))
+        entry.pack(fill="x", ipady=6)
+        return entry
 
-    def limpar(self):
-
-        for widget in self.root.winfo_children():
-            widget.destroy()
-
-    def criar_interface(self):
-
-        self.limpar()
-
-        self.root.title(
-            "Fila N1 - Login"
-        )
-
-        self.root.geometry(
-            "360x360"
-        )
-
-        self.root.resizable(
-            False,
-            False,
-        )
-
-        self.root.configure(
-            bg=COR_FUNDO
-        )
-
-        titulo = tk.Label(
-            self.root,
-            text="FILA N1",
-            bg=COR_FUNDO,
-            fg=COR_TEXTO,
-            font=(
-                FONTE_PADRAO,
-                24,
-                "bold",
-            ),
-        )
-
-        titulo.pack(
-            pady=(35, 5)
-        )
-
-        subtitulo = tk.Label(
-            self.root,
-            text="Entrar",
-            bg=COR_FUNDO,
-            fg=COR_SECUNDARIO,
-            font=(
-                FONTE_PADRAO,
-                10,
-            ),
-        )
-
-        subtitulo.pack(
-            pady=(0, 25)
-        )
-
-        tk.Label(
-            self.root,
-            text="E-mail",
-            bg=COR_FUNDO,
-            fg=COR_SECUNDARIO,
-            font=(FONTE_PADRAO, 9),
-        ).pack(
-            anchor="w",
-            padx=45,
-        )
-
-        self.email_entry = tk.Entry(
-            self.root,
-            font=(
-                FONTE_PADRAO,
-                11,
-            ),
-            relief="flat",
-        )
-
-        self.email_entry.pack(
-            fill="x",
-            padx=45,
-            ipady=6,
-        )
-
-        tk.Label(
-            self.root,
-            text="Senha",
-            bg=COR_FUNDO,
-            fg=COR_SECUNDARIO,
-            font=(FONTE_PADRAO, 9),
-        ).pack(
-            anchor="w",
-            padx=45,
-            pady=(15, 0),
-        )
-
-        self.senha_entry = tk.Entry(
-            self.root,
-            show="*",
-            font=(
-                FONTE_PADRAO,
-                11,
-            ),
-            relief="flat",
-        )
-
-        self.senha_entry.pack(
-            fill="x",
-            padx=45,
-            ipady=6,
-        )
-
-        botao = tk.Button(
-            self.root,
-            text="Entrar",
-            command=self.entrar,
-            bg=COR_DESTAQUE,
-            fg="white",
-            relief="flat",
-            bd=0,
-            font=(
-                FONTE_PADRAO,
-                10,
-                "bold",
-            ),
-            cursor="hand2",
-        )
-
-        botao.pack(
-            fill="x",
-            padx=45,
-            pady=(25, 10),
-            ipady=6,
-        )
-
-        cadastro = tk.Button(
-            self.root,
-            text="Criar cadastro",
-            command=self.ao_cadastrar,
-            bg=COR_FUNDO,
-            fg=COR_SECUNDARIO,
-            activebackground=COR_FUNDO,
-            activeforeground=COR_TEXTO,
-            relief="flat",
-            bd=0,
-            font=(
-                FONTE_PADRAO,
-                9,
-            ),
-            cursor="hand2",
-        )
-
-        cadastro.pack()
-
-        self.email_entry.focus_set()
+    def aplicar_cor(self):
+        cor = cor_destaque(self.aparencia["cor"], self.aparencia["tema"])
+        self.entrar_btn.configure(bg=cor, fg=cor_texto_botao(cor), activebackground=cor,
+                                  activeforeground=cor_texto_botao(cor))
+        self.cadastro_btn.configure(fg=cor, activeforeground=cor)
+        for campo in (self.identificacao_entry, self.senha_entry):
+            campo.configure(highlightcolor=cor)
 
     def entrar(self):
-
-        email = self.email_entry.get().strip()
-        senha = self.senha_entry.get()
-
-        if not email or not senha:
-
-            messagebox.showwarning(
-                "Login",
-                "Informe o e-mail e a senha.",
-            )
-
+        if not self.ativo or str(self.entrar_btn["state"]) == "disabled":
             return
-
-        try:
-
-            usuario = autenticar_usuario(
-                email,
-                senha,
-            )
-
-        except Exception as erro:
-
-            messagebox.showerror(
-                "Erro",
-                f"Não foi possível realizar o login:\n\n{erro}",
-            )
-
+        identificacao, senha = self.identificacao_entry.get().strip(), self.senha_entry.get()
+        if not identificacao or not senha:
+            messagebox.showwarning("Login", "Informe o login e a senha.")
             return
+        self.entrar_btn.configure(state="disabled", text="Entrando…")
+        self.executor.executar(lambda: autenticar_usuario(identificacao, senha), self.receber_login, self.erro)
 
+    def receber_login(self, usuario):
+        if not self.ativo:
+            return
+        self.entrar_btn.configure(state="normal", text="Entrar")
         if usuario is None:
+            messagebox.showerror("Login", "Login ou senha inválidos, ou usuário inativo.")
+        else:
+            self.ao_logar(usuario)
 
-            messagebox.showerror(
-                "Login",
-                "E-mail ou senha inválidos.",
-            )
+    def erro(self, erro):
+        if self.ativo:
+            self.entrar_btn.configure(state="normal", text="Entrar")
+            messagebox.showerror("Conexão", "Não foi possível entrar. Verifique a conexão e a configuração do banco.")
 
-            return
-
-        self.ao_logar(usuario)
+    def encerrar(self):
+        self.ativo = False
+        self.frame.destroy()

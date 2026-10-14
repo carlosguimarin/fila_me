@@ -55,6 +55,8 @@ A proteção ocorre em camadas:
 4. bloqueio da linha de `fila_estado` com `FOR UPDATE`;
 5. seleção e avanço dentro da transação.
 
+Exceção controlada: se uma atribuição existente estiver em `AGUARDANDO_TECNICO`, o servidor processa o Owner recebido e tenta reavaliar a mesma atribuição. Havendo técnico elegível, ela pode passar a `PENDENTE`, sem criar ticket ou atribuição duplicada. Uma atribuição reconhecida como Supervisão não entra na rotação técnica.
+
 ## 4. Componentes Python conhecidos
 
 ### `app.py`
@@ -77,6 +79,7 @@ Funções conhecidas:
 - `registrar_ticket`
 - `buscar_tecnicos_trabalhando`
 - `registrar_ticket_e_atribuir`
+- `atribuir_ticket_aguardando`
 - `buscar_ultimas_atribuicoes`
 - `buscar_proximo_tecnico`
 - `criar_usuario`
@@ -148,6 +151,8 @@ A tela principal consulta o estado periodicamente, atualmente em intervalo de ap
 
 A extensão também faz polling em aproximadamente 5 segundos.
 
+O heartbeat do técnico é enviado pela UI a cada 5 segundos e considerado válido por 15 segundos nas consultas de elegibilidade.
+
 ## 9. Princípio arquitetural importante
 
 A extensão detecta fatos do OTRS.
@@ -158,3 +163,7 @@ Ela NÃO deve decidir:
 - como corrigir a fila.
 
 Essas regras pertencem à aplicação/banco.
+
+## 10. Apresentação V2 sobre serviços V1
+
+A interface Tkinter utiliza componentes, temas, ícones e preferências locais da V2. `buscar_painel_visual()` em `database/banco.py` consulta as últimas nove atribuições, o próximo técnico e os técnicos elegíveis para apresentar o painel. Essa função não escreve no banco e não seleciona nem avança a fila. Login e cadastro continuam usando `database/autenticacao.py`; a presença técnica continua usando `atualizar_status_trabalhando()` e `atualizar_heartbeat()` com intervalo de 5 segundos. O servidor local e a extensão permanecem os da V1.

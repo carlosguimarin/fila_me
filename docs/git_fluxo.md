@@ -83,6 +83,8 @@ luis → main
 
 somente após testes.
 
+Para uma mudança grande de interface que será integrada com as regras já existentes de fila, backend e OTRS, seguir `integracao_v2.md`. Não fazer merge cego nem resolver conflitos de `banco.py`, `servidor_local.py` ou fluxos de presença escolhendo apenas um lado.
+
 ## 6. Histórico de PRs de teste
 
 PRs antigos usados durante testes foram fechados:

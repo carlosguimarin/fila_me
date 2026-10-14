@@ -24,13 +24,17 @@ Estrutura conhecida:
 ```sql
 tickets(
     numero_ticket BIGINT PRIMARY KEY,
-    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    criado_em TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    status_bloqueio VARCHAR(20),
+    bloqueio_confirmado BOOLEAN NOT NULL DEFAULT FALSE,
+    bloqueado_em TIMESTAMP
 )
 ```
 
 Função:
 - catálogo de tickets já registrados;
 - impede duplicação por número.
+- guarda o primeiro bloqueio observado no OTRS; a confirmação permanece associada ao número do ticket.
 
 ### `fila_estado`
 
@@ -71,7 +75,8 @@ atribuicoes(
     status VARCHAR(30) NOT NULL DEFAULT 'PENDENTE',
     owner_otrs VARCHAR(150),
     confirmado_em TIMESTAMP,
-    tipo_atribuicao VARCHAR(30) NOT NULL DEFAULT 'TECNICO'
+    tipo_atribuicao VARCHAR(30) NOT NULL DEFAULT 'TECNICO',
+    ultimo_tecnico_id_anterior BIGINT
 )
 ```
 
@@ -99,6 +104,7 @@ usuarios(
     cargo CHECK ('tecnico' ou 'supervisao'),
     ativo BOOLEAN DEFAULT TRUE,
     trabalhando BOOLEAN DEFAULT FALSE,
+    ultimo_heartbeat TIMESTAMP,
     criado_em TIMESTAMP
 )
 ```
@@ -114,13 +120,18 @@ INSERT ticket
 ON CONFLICT DO NOTHING
 
 se já existia:
-    não criar atribuição
+    não criar ticket nem atribuição duplicada
+    se atribuição estiver AGUARDANDO_TECNICO:
+        processar primeiro o Owner recebido
+        se continuar aguardando e houver técnico elegível:
+            reavaliar e atribuir o próximo técnico
     finalizar
 
 buscar técnicos:
     cargo = tecnico
     ativo = true
     trabalhando = true
+    heartbeat nos últimos 15 segundos
 
 se nenhum:
     criar atribuição AGUARDANDO_TECNICO
@@ -135,6 +146,10 @@ se existem:
 
 COMMIT
 ```
+
+`atribuir_ticket_aguardando(numero_ticket)` faz a reavaliação de uma atribuição existente. Ela bloqueia a linha da atribuição e a linha de `fila_estado`, verifica se o status continua `AGUARDANDO_TECNICO`, exclui registros já classificados como Supervisão e, havendo técnicos elegíveis, muda a atribuição para `PENDENTE` e atualiza `ultimo_tecnico_id`.
+
+O servidor chama a reavaliação depois do processamento do Owner nos caminhos `/tickets` e `/owner`. Assim, um Owner reconhecido como supervisor confirma Supervisão antes de qualquer atribuição técnica. A função não varre indiscriminadamente a tabela: atua sobre o número de ticket recebido pela integração.
 
 ## 4. Por que `FOR UPDATE`
 
@@ -158,6 +173,8 @@ Com o bloqueio, uma transação entra primeiro, atualiza o estado e a próxima l
 - trata técnico igual ao provisional;
 - trata técnico diferente;
 - trata Owner desconhecido.
+
+Owners que não correspondem a um usuário ativo são persistidos e apresentados como `Admin OTRS`; o nome bruto recebido do dashboard não deve aparecer na resposta da integração.
 
 Nenhum desses caminhos deve alterar a posição da fila.
 

@@ -1,0 +1,8 @@
+Ícones: Lucide 1.8.0
+https://lucide.dev
+Fonte: pacote lucide instalado; ícones originais exportados para SVG e PNG transparente de 128 px.
+Apenas tamanho, espessura e cor de exportação ajustados. Licença incluída.
+Preferências: Settings2, mesma origem/licença e exportação dos demais assets.
+Cadeados: Lucide lock e lock-open, versão 1.57.0.
+Fontes: https://lucide.dev/icons/lock e https://lucide.dev/icons/lock-open
+SVGs oficiais mantidos junto aos PNGs de 128 px, redesenhados pelas formas vetoriais oficiais com antialiasing e alfa transparente.
