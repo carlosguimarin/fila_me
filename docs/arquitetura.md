@@ -55,6 +55,8 @@ A proteção ocorre em camadas:
 4. bloqueio da linha de `fila_estado` com `FOR UPDATE`;
 5. seleção e avanço dentro da transação.
 
+Exceção controlada: se uma atribuição existente estiver em `AGUARDANDO_TECNICO`, o servidor processa o Owner recebido e tenta reavaliar a mesma atribuição. Havendo técnico elegível, ela pode passar a `PENDENTE`, sem criar ticket ou atribuição duplicada. Uma atribuição reconhecida como Supervisão não entra na rotação técnica.
+
 ## 4. Componentes Python conhecidos
 
 ### `app.py`
@@ -77,6 +79,7 @@ Funções conhecidas:
 - `registrar_ticket`
 - `buscar_tecnicos_trabalhando`
 - `registrar_ticket_e_atribuir`
+- `atribuir_ticket_aguardando`
 - `buscar_ultimas_atribuicoes`
 - `buscar_proximo_tecnico`
 - `criar_usuario`
@@ -147,6 +150,8 @@ O estado visual do botão muda entre:
 A tela principal consulta o estado periodicamente, atualmente em intervalo de aproximadamente 5 segundos.
 
 A extensão também faz polling em aproximadamente 5 segundos.
+
+O heartbeat do técnico é enviado pela UI a cada 5 segundos e considerado válido por 15 segundos nas consultas de elegibilidade.
 
 ## 9. Princípio arquitetural importante
 

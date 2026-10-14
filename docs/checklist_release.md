@@ -25,6 +25,10 @@
 - [ ] ticket repetido não duplica
 - [ ] Owner supervisor aparece como Supervisão
 - [ ] Owner diferente não altera fila
+- [ ] ticket ativo `AGUARDANDO_TECNICO` é reavaliado ao voltar pela integração
+- [ ] Owner Supervisor impede a atribuição técnica do ticket aguardando
+- [ ] polling repetido não duplica atribuição nem consome vez novamente
+- [ ] tickets ausentes/fantasmas não são distribuídos por varredura global
 
 ## Usuários
 
@@ -57,3 +61,4 @@
 - [ ] `.env` separado
 - [ ] extensão atualizada
 - [ ] pacote de release sem segredos
+- [ ] ZIP contém somente `FilaME.exe`; `.env` fica separado ao lado dele

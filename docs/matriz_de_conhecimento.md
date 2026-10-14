@@ -13,6 +13,7 @@ Use este arquivo para saber onde procurar cada informação.
 | Supervisor | `regras_negocio.md` | `banco.py` |
 | Banco | `banco_dados.md` | `banco.py` |
 | UI | `arquitetura.md` | `janela_principal.py` |
+| Integração da V2 de UI | `integracao_v2.md` | UI + contratos do backend |
 | Fixar janela | `testes_e_problemas.md` | `janela_principal.py` |
 | Extensão | `otrs_extensao.md` | `content.js`, `background.js`, `manifest.json` |
 | Build | `ambiente_execucao.md` | PyInstaller/spec |

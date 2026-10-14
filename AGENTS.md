@@ -192,29 +192,11 @@ Entre as responsabilidades já implementadas:
 
 ### Estado importante atual
 
-O arquivo `banco.py` enviado mais recentemente pelo usuário é a versão-base atual. Nessa versão, a tabela `usuarios` contém `trabalhando`, mas **não contém ainda `ultimo_heartbeat` no `CREATE TABLE`**, e as consultas atuais de técnicos trabalhando ainda usam apenas:
+O código atual cria/verifica `usuarios.ultimo_heartbeat`, envia heartbeat aproximadamente a cada 5 segundos pela janela principal e considera válido um heartbeat dos últimos 15 segundos. A integração foi implementada no código. Consultas feitas no Neon durante o desenvolvimento mostraram heartbeat recente do Carlos e heartbeat expirado do Luís deixando-o inelegível. Isso não substitui a validação operacional após cada alteração/build.
 
-```sql
-trabalhando = TRUE
-```
+`banco.py` também possui `atribuir_ticket_aguardando(numero_ticket)`. O servidor chama essa reavaliação depois de processar Owner em `/tickets` e `/owner`. Ela atua somente sobre o ticket recebido, se a atribuição ainda estiver `AGUARDANDO_TECNICO`, e distribui para o próximo técnico elegível, exceto quando a atribuição/Owner reconhecido é Supervisão.
 
-Portanto, o heartbeat foi decidido e o banco Neon já recebeu alterações SQL, mas a integração completa do heartbeat no código ainda está em andamento.
-
-O SQL já executado no Neon foi:
-
-```sql
-ALTER TABLE usuarios
-ADD COLUMN IF NOT EXISTS ultimo_heartbeat TIMESTAMP;
-```
-
-e:
-
-```sql
-UPDATE usuarios
-SET ultimo_heartbeat = NULL;
-```
-
-Esses comandos foram executados com sucesso/sem necessidade de retorno visual.
+O heartbeat já é verificado na seleção de técnicos e na atualização do Owner. A reavaliação de `AGUARDANDO_TECNICO` teve sua sintaxe conferida, mas a validação operacional do ciclo completo com OTRS/Neon ainda precisa ser registrada.
 
 ---
 
@@ -263,7 +245,7 @@ Foi ajustada para permitir:
 
 ## 3.5 `src\fila_me\ui\janela_principal.py`
 
-**IMPLEMENTADO, COM ALTERAÇÃO DE HEARTBEAT EM TRANSIÇÃO**
+**IMPLEMENTADO, COM HEARTBEAT**
 
 Interface principal atual conhecida:
 
@@ -313,7 +295,7 @@ O estado é atualizado periodicamente, atualmente a cada 5 segundos.
 
 ### Heartbeat
 
-Foi preparada uma versão da `janela_principal.py` que:
+O arquivo atual da `janela_principal.py`:
 
 - importa `atualizar_heartbeat`;
 - envia heartbeat a cada 5 segundos;
@@ -321,7 +303,7 @@ Foi preparada uma versão da `janela_principal.py` que:
 - cancela o callback ao sair;
 - limpa o status ao encerrar normalmente.
 
-**IMPORTANTE:** a versão heartbeat-enabled foi fornecida durante a conversa, mas não houve confirmação final de que ela foi salva no repositório. O Codex deve verificar o arquivo real antes de assumir que essa versão está instalada.
+Reconfirme esse ciclo de vida após mudanças na UI, especialmente durante a integração da V2.
 
 ---
 
@@ -331,15 +313,16 @@ Esta seção é crítica. **Não alterar sem confirmação.**
 
 ## 4.1 Técnicos que participam da fila
 
-Somente usuários que atendem aos critérios abaixo participam da seleção normal:
+Somente usuários que atendem a todos estes critérios participam da seleção normal:
 
 ```text
 cargo = 'tecnico'
 ativo = TRUE
 trabalhando = TRUE
+ultimo_heartbeat >= CURRENT_TIMESTAMP - INTERVAL '15 seconds'
 ```
 
-Com o heartbeat concluído, a intenção definitiva é considerar também a validade temporal do heartbeat.
+O heartbeat é enviado aproximadamente a cada 5 segundos.
 
 O objetivo do heartbeat é evitar que um técnico permaneça artificialmente como trabalhando depois de:
 
@@ -411,7 +394,7 @@ Portanto:
 - se já apareceu anteriormente → não é novo;
 - se o mesmo ticket aparecer novamente semanas ou meses depois → continua sendo o mesmo ticket conhecido.
 
-Não criar uma nova atribuição simplesmente porque o ticket voltou a aparecer no dashboard.
+Não criar ticket nem nova linha de atribuição simplesmente porque o mesmo número voltou a aparecer no dashboard. Exceção: se a atribuição existente ainda estiver `AGUARDANDO_TECNICO`, o servidor processa o Owner recebido e pode reavaliar aquela atribuição; se continuar aguardando e houver técnico elegível, atualiza a linha existente para `PENDENTE` e avança a fila uma vez.
 
 ---
 
@@ -592,10 +575,9 @@ Se o Owner não corresponder a um usuário cadastrado:
 
 - registrar `owner_otrs`;
 - não inventar usuário;
-- não alterar a fila;
 - não alterar a atribuição para um técnico inexistente.
 
-A informação deve permanecer para auditoria.
+A informação deve permanecer para auditoria. Owner desconhecido não altera a fila por si só. Uma atribuição ainda em `AGUARDANDO_TECNICO` pode, separadamente, ser reavaliada para o próximo técnico elegível conforme a regra 4.11.
 
 ---
 
@@ -615,6 +597,8 @@ tecnico = NULL
 
 O sistema não deve inventar uma atribuição.
 
+Quando o mesmo ticket ativo for recebido novamente pela integração, o Owner é processado primeiro. Se não for reconhecido como Supervisão e o registro continuar aguardando, a rotina `atribuir_ticket_aguardando()` atribui o próximo técnico elegível, quando houver.
+
 ---
 
 ## 4.11 Ticket já conhecido
@@ -622,10 +606,9 @@ O sistema não deve inventar uma atribuição.
 Se `numero_ticket` já existir em `tickets`:
 
 - não criar novo ticket;
-- não consumir nova vez;
 - não criar nova atribuição inicial.
 
-Ainda é possível processar Owner posteriormente, conforme o fluxo da extensão.
+Ainda é possível processar Owner posteriormente. Se já existir uma atribuição `AGUARDANDO_TECNICO`, o recebimento repetido pode convertê-la para `PENDENTE`; essa conversão consome uma vez na fila. Depois de sair de `AGUARDANDO_TECNICO`, os polls repetidos não consomem outra vez.
 
 ---
 
@@ -713,6 +696,7 @@ Para alterações posteriores, a intenção é:
 - tratamento de Supervisão;
 - tratamento de Owner desconhecido;
 - seleção do próximo técnico;
+- reavaliação de atribuições existentes em `AGUARDANDO_TECNICO`;
 - controle `trabalhando`.
 
 ## Interface
@@ -772,8 +756,10 @@ Copy-Item .\.env .\dist\.env
 E ZIP:
 
 ```powershell
-Compress-Archive -Path .\dist\FilaME.exe, .\dist\.env -DestinationPath .\dist\FilaME.zip -Force
+Compress-Archive -Path .\dist\FilaME.exe -DestinationPath .\dist\FilaME.zip -Force
 ```
+
+O `.env` permanece separado em `dist` ao lado do executável; não incluí-lo no ZIP.
 
 O executável é:
 
@@ -883,19 +869,11 @@ Isso ainda precisa ser investigado.
 
 ---
 
-## 8.2 Heartbeat ainda não está completamente integrado
+## 8.2 Heartbeat
 
-**PENDENTE**
+**IMPLEMENTADO NO CÓDIGO; TESTE OPERACIONAL REGISTRADO PARCIALMENTE**
 
-O banco Neon já recebeu:
-
-```sql
-ultimo_heartbeat
-```
-
-mas o arquivo `banco.py` atualmente enviado pelo usuário ainda não contém a implementação final.
-
-A versão heartbeat-enabled de `janela_principal.py` foi criada durante a conversa, mas não houve confirmação final de que ela está salva no projeto.
+`banco.py` atualiza e consulta `ultimo_heartbeat`; a janela principal envia heartbeat a cada 5 segundos para técnicos. O limite de elegibilidade é 15 segundos. Foram observados valores atualizados e um técnico com heartbeat expirado deixando de ser elegível. Revalidar depois de mudanças de ciclo de vida/login e antes de distribuição.
 
 ---
 
@@ -909,71 +887,29 @@ A fonte correta é sempre o arquivo atual do repositório/arquivo fornecido pelo
 
 ---
 
-# 9. FUNCIONALIDADES PENDENTES
+# 9. FUNCIONALIDADES PENDENTES / VALIDAÇÕES
 
-## PENDENTE — Finalizar heartbeat
+## PENDENTE — Validar reavaliação de `AGUARDANDO_TECNICO`
 
-Implementar corretamente:
+O código reavalia a atribuição existente quando o ticket volta a ser recebido por `/tickets` ou `/owner`, processando Owner primeiro. Validar com Neon/OTRS: ausência de técnicos, técnico elegível, Owner Supervisor, polling duplicado e concorrência de duas instâncias. Não varrer a tabela para reintroduzir fantasmas/ausentes do OTRS.
 
-```text
-usuarios.ultimo_heartbeat
-```
+## PENDENTE — Corrigir/levar a diagnóstico a leitura do Owner
 
-e utilizar a validade temporal para determinar técnicos online.
+Valores como `bloqueado`, `desbloqueado`, categorias e títulos de tickets foram observados em `owner_otrs`. Conferir o DOM real do OTRS antes de alterar a extensão. Não tratar esses valores como prova do técnico que bloqueou/assumiu.
 
-Comportamento desejado:
+## PENDENTE — Validar novo executável após as alterações atuais
 
-```text
-heartbeat a cada 5 segundos
-validade: 15 segundos
-```
-
-Ao sair normalmente:
-
-```text
-trabalhando = FALSE
-ultimo_heartbeat = NULL
-```
-
-Após crash/queda:
-
-```text
-não recebe heartbeat
-↓
-15 segundos
-↓
-deixa de ser elegível
-```
-
-## PENDENTE — Testar heartbeat
-
-Testes mínimos desejados:
-
-1. abrir aplicação;
-2. login do técnico;
-3. consultar `ultimo_heartbeat`;
-4. verificar atualização aproximadamente a cada 5 segundos;
-5. fechar normalmente;
-6. verificar `trabalhando = FALSE` e heartbeat limpo;
-7. opcionalmente encerrar o processo à força e esperar mais de 15 segundos para verificar que deixa de ser considerado online.
-
-Não criar uma bateria excessiva de testes se um teste direto for suficiente.
-
-## PENDENTE — Corrigir leitura do Owner
-
-Investigar DOM do OTRS para garantir que o Owner verdadeiro seja lido.
-
-## PENDENTE — Gerar novo executável após heartbeat
-
-Depois de validar o código:
+Depois da validação operacional e aprovação do código:
 
 ```powershell
 Remove-Item -Recurse -Force .\build
 Remove-Item -Recurse -Force .\dist
 pyinstaller .\FilaME.spec
 Copy-Item .\.env .\dist\.env
-Compress-Archive -Path .\dist\FilaME.exe, .\dist\.env -DestinationPath .\dist\FilaME.zip -Force
+Compress-Archive -Path .\dist\FilaME.exe -DestinationPath .\dist\FilaME.zip -Force
 ```
+
+O `.env` deve ser copiado para `dist` e ficar ao lado do executável, mas **não deve entrar no ZIP**.
 
 Não criar nova Release GitHub.
 
@@ -1412,8 +1348,8 @@ O usuário pode ativar/desativar a janela sempre no topo.
 Ao clicar em `Sair`:
 
 - encerra a janela;
-- deve marcar o técnico como não trabalhando;
-- com heartbeat concluído, também deve limpar/cancelar o heartbeat.
+- marca o técnico como não trabalhando e limpa o heartbeat;
+- cancela o callback periódico para não deixar tarefa pendente.
 
 ---
 
@@ -1454,8 +1390,10 @@ Copy-Item .\.env .\dist\.env
 ## 15.3 ZIP
 
 ```powershell
-Compress-Archive -Path .\dist\FilaME.exe, .\dist\.env -DestinationPath .\dist\FilaME.zip -Force
+Compress-Archive -Path .\dist\FilaME.exe -DestinationPath .\dist\FilaME.zip -Force
 ```
+
+O ZIP contém somente o executável. O `.env` permanece separado em `dist` ao lado do `.exe`.
 
 ## 15.4 Segurança
 
@@ -1600,6 +1538,10 @@ O responsável pelo projeto prefere:
 - desenvolvimento em VS Code;
 - terminal principalmente para Git/comandos.
 
+## 17.9 Integração da V2 de interface
+
+Antes de integrar a V2 desenvolvida por Luís, ler `docs/integracao_v2.md`. Preservar os contratos e regras atuais da branch de Carlos; alterações visuais não autorizam reimplementar fila/Owner no cliente ou remover heartbeat, logout, histórico, pinagem, servidor local ou integração OTRS. Atualizar as referências Git e revisar o diff mais recente antes de inferir o conteúdo da branch `luis`.
+
 ---
 
 # 18. HISTÓRICO DE DECISÕES / EVOLUÇÃO
@@ -1684,14 +1626,13 @@ com janela de aproximadamente 15 segundos.
 
 # 19. QUESTÕES EM ABERTO
 
-1. Finalizar a integração do heartbeat no `banco.py`.
-2. Confirmar que a `janela_principal.py` atual usa o heartbeat.
-3. Corrigir/validar a extração do Owner no OTRS.
-4. Fazer teste mínimo do heartbeat.
-5. Gerar novo `.exe` após validação.
-6. Fazer commit/PR/merge das alterações pendentes.
+1. Corrigir/validar a extração do Owner no OTRS usando o DOM real.
+2. Validar operacionalmente a reavaliação de `AGUARDANDO_TECNICO`, incluindo Owner Supervisor, concorrência e polling repetido.
+3. Gerar novo `.exe` após a validação/aprovação do código integrado.
+4. Integrar a V2 de interface seguindo `docs/integracao_v2.md`; o estado local/remoto da branch do Luís deve ser atualizado antes de comparar.
+5. Fazer commit/PR/merge das alterações que ainda estiverem pendentes.
 
-Não assumir que questões acima já foram resolvidas apenas porque uma solução foi discutida ou um arquivo foi gerado durante a conversa.
+Não assumir que teste, build, push ou merge foi executado somente porque um comando ou uma orientação foi fornecida.
 
 ---
 
@@ -1717,32 +1658,29 @@ Não assumir que questões acima já foram resolvidas apenas porque uma soluçã
 ## Não está totalmente resolvido
 
 - leitura confiável do Owner em todos os casos;
-- heartbeat ainda em integração/validação.
+- operação completa da reavaliação de tickets aguardando técnico ainda precisa ser validada após as alterações atuais.
 
-## Em desenvolvimento agora
+## Implementado no código
 
-**Heartbeat de presença dos técnicos.**
+- heartbeat de presença dos técnicos;
+- reavaliação da atribuição existente `AGUARDANDO_TECNICO` quando o ticket volta a ser recebido pela integração;
+- proteção para que Owner/tipo Supervisão não seja encaminhado à rotação técnica.
 
-O banco Neon já possui a coluna:
+O heartbeat usa:
 
 ```text
-ultimo_heartbeat
+intervalo de envio ~5 segundos
+validade de 15 segundos
 ```
-
-mas o código atual enviado pelo usuário ainda precisa receber a implementação final.
 
 ## Próximo passo recomendado
 
-1. Atualizar `src\fila_me\database\banco.py` com heartbeat, preservando toda a lógica existente.
-2. Atualizar/confirmar `src\fila_me\ui\janela_principal.py`.
-3. Executar o app.
-4. Verificar `ultimo_heartbeat` no Neon.
-5. Testar logout normal.
-6. Se necessário, fazer um teste de encerramento forçado.
-7. Gerar novo `.exe`.
-8. Commitar em branch de trabalho.
-9. Push.
-10. PR para `main`.
+1. Validar operacionalmente a reavaliação com tickets de teste controlados e os cenários de `docs/testes_e_problemas.md`.
+2. Obter e comparar os commits atualizados da V2 de Luís.
+3. Integrar a nova UI sem substituir regras/contratos existentes; seguir `docs/integracao_v2.md`.
+4. Validar o resultado integrado.
+5. Gerar novo `.exe` somente depois da validação.
+6. Fazer commit, push e PR conforme o fluxo Git.
 
 ---
 
@@ -1751,7 +1689,7 @@ mas o código atual enviado pelo usuário ainda precisa receber a implementaçã
 1. FILA ME é uma aplicação Python desktop para controlar a fila de atendimento de chamados do OTRS.
 2. O OTRS continua sendo a fonte do Owner real; o FILA faz uma atribuição inicial/provisória.
 3. A fila é centralizada no Neon PostgreSQL e compartilhada entre os computadores.
-4. Ticket é identificado exclusivamente por `numero_ticket`; ticket já visto nunca consome a fila novamente.
+4. Ticket é identificado exclusivamente por `numero_ticket`; ticket já visto não gera duplicata, mas uma atribuição existente `AGUARDANDO_TECNICO` pode consumir uma vez quando reavaliada e atribuída.
 5. A atribuição inicial de um ticket novo consome a vez imediatamente.
 6. Owner igual ao técnico originalmente atribuído apenas confirma a atribuição; não avança a fila novamente.
 7. Outro técnico assumir não significa automaticamente que a fila deve avançar.
@@ -1759,22 +1697,22 @@ mas o código atual enviado pelo usuário ainda precisa receber a implementaçã
 9. Se o técnico original estiver offline, outro técnico pode consumir a vez somente se for o próximo naquele momento.
 10. Supervisão é coringa e não consome a vez.
 11. Para Supervisão existe `ultimo_tecnico_id_anterior`, usado para restaurar a fila quando a atribuição ainda é PENDENTE/TECNICO.
-12. Owner desconhecido é apenas registrado em `owner_otrs`; não altera a fila.
+12. Owner desconhecido é registrado sem inferir cargo; se o ticket ainda estiver aguardando, a rotina separada de reavaliação pode atribuir um técnico elegível.
 13. Sem técnico trabalhando, novo ticket fica `AGUARDANDO_TECNICO`.
 14. Estado da fila usa `fila_estado.ultimo_tecnico_id` e lock `FOR UPDATE`.
 15. Banco oficial é PostgreSQL/Neon; SQLite foi descartado como fonte oficial.
 16. A extensão OTRS lê o DOM do dashboard e envia tickets/Owner para `127.0.0.1:8765`.
 17. Servidor Python local possui `/tickets`, `/owner` e `/estado`.
 18. Existe bug conhecido na leitura do Owner: um caso registrou `bloqueado` em vez do Owner real Luís.
-19. Heartbeat é a melhoria em desenvolvimento: aproximadamente 5s de intervalo e 15s de validade.
-20. Neon já recebeu a coluna `usuarios.ultimo_heartbeat`.
-21. O `banco.py` atualmente fornecido pelo usuário ainda não possui a implementação final do heartbeat.
-22. A versão heartbeat da `janela_principal.py` foi criada, mas precisa ser confirmada no código real.
-23. Não alterar a lógica de fila/Owner durante a implementação do heartbeat.
+19. Heartbeat está implementado: aproximadamente 5s de intervalo e 15s de validade.
+20. Neon/código usam `usuarios.ultimo_heartbeat`.
+21. Reavaliação de `AGUARDANDO_TECNICO` está no código; ainda falta registrar a validação operacional completa.
+22. Existe bug conhecido na extração do Owner; `owner_otrs` pode conter textos de status/assunto.
+23. Mudanças futuras de UI da V2 devem preservar regras e contratos; seguir `docs/integracao_v2.md`.
 24. Não criar soluções paralelas antes de analisar o código existente.
 25. Não remover funcionalidades ou regras sem confirmação.
 26. Branch principal de desenvolvimento do Carlos é `carlos`; `main` é protegida por PR.
 27. Não usar force push/reset destrutivo sem autorização.
 28. PyInstaller gera `dist/FilaME.exe`; o `.env` precisa acompanhar o executável.
 29. A versão oficial `v1.0.0` já existe; não criar nova Release para cada atualização.
-30. Próximo passo: finalizar/testar heartbeat, depois corrigir Owner e gerar novo executável.
+30. Próximos passos: validar reavaliação de aguardando, revisar extração do Owner e integrar a V2 de interface sem regressões; depois validar e gerar novo executável.

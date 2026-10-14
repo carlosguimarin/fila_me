@@ -61,9 +61,10 @@ A estrutura exata deve ser confirmada na branch antes de criar novos caminhos.
 ### Fila
 
 - Estado centralizado no Neon.
-- Somente técnicos trabalhando participam.
+- Somente técnicos ativos com `trabalhando = TRUE` e heartbeat válido por 15 segundos participam.
 - Atribuição inicial avança a fila.
 - Owner posterior não corrige a posição da fila.
+- Uma atribuição existente em `AGUARDANDO_TECNICO` pode ser reavaliada quando o ticket volta a ser recebido pela integração. O Owner é processado primeiro; Supervisão não entra na fila técnica.
 
 ### OTRS
 
@@ -71,6 +72,7 @@ A estrutura exata deve ser confirmada na branch antes de criar novos caminhos.
 - Número do ticket e Owner são enviados.
 - Polling atual: aproximadamente 5 segundos.
 - A aplicação local recebe os dados.
+- A leitura do Owner pode estar incorreta em algumas linhas; valores como `bloqueado`, `desbloqueado` e assunto de chamado já apareceram em `owner_otrs`.
 
 ### Histórico
 
@@ -103,8 +105,8 @@ Antes de uma release final, conferir:
 - executável foi reconstruído após o último código aprovado;
 - extensão distribuída corresponde ao código aprovado.
 
-## 6. Importante sobre o snapshot do GitHub
+A sintaxe do fluxo recente de reavaliação foi conferida, mas sua operação com Neon/OTRS e o ciclo completo ainda precisam ser validados antes de distribuir o executável.
 
-Durante a criação desta documentação, a página pública do GitHub mostrava `main` com apenas um commit visível. Portanto, não assumir que todas as alterações recentes descritas no histórico de desenvolvimento já estejam em `main`.
+## 6. Integração da V2 de interface
 
-O estado de trabalho deve ser confirmado na branch correta antes de uma release.
+Antes de integrar uma mudança grande de UI, seguir `integracao_v2.md`. A UI pode mudar de organização e aparência, mas deve preservar os contratos de banco, fila, presença, Owner, Supervisão, servidor local e encerramento descritos nos documentos de regras e arquitetura.

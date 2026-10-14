@@ -21,6 +21,7 @@ O projeto foi desenvolvido de forma incremental e várias decisões importantes 
 - `ambiente_execucao.md` — execução Python, `.env` e PyInstaller.
 - `seguranca.md` — segredos e autenticação.
 - `historico_projeto.md` — evolução conhecida do projeto.
+- `integracao_v2.md` — checklist para integrar a V2 de interface sem perder os contratos atuais do backend e as regras de negócio.
 
 ## Como uma IA deve começar
 

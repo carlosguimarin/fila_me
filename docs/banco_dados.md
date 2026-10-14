@@ -71,7 +71,8 @@ atribuicoes(
     status VARCHAR(30) NOT NULL DEFAULT 'PENDENTE',
     owner_otrs VARCHAR(150),
     confirmado_em TIMESTAMP,
-    tipo_atribuicao VARCHAR(30) NOT NULL DEFAULT 'TECNICO'
+    tipo_atribuicao VARCHAR(30) NOT NULL DEFAULT 'TECNICO',
+    ultimo_tecnico_id_anterior BIGINT
 )
 ```
 
@@ -99,6 +100,7 @@ usuarios(
     cargo CHECK ('tecnico' ou 'supervisao'),
     ativo BOOLEAN DEFAULT TRUE,
     trabalhando BOOLEAN DEFAULT FALSE,
+    ultimo_heartbeat TIMESTAMP,
     criado_em TIMESTAMP
 )
 ```
@@ -114,13 +116,18 @@ INSERT ticket
 ON CONFLICT DO NOTHING
 
 se já existia:
-    não criar atribuição
+    não criar ticket nem atribuição duplicada
+    se atribuição estiver AGUARDANDO_TECNICO:
+        processar primeiro o Owner recebido
+        se continuar aguardando e houver técnico elegível:
+            reavaliar e atribuir o próximo técnico
     finalizar
 
 buscar técnicos:
     cargo = tecnico
     ativo = true
     trabalhando = true
+    heartbeat nos últimos 15 segundos
 
 se nenhum:
     criar atribuição AGUARDANDO_TECNICO
@@ -135,6 +142,10 @@ se existem:
 
 COMMIT
 ```
+
+`atribuir_ticket_aguardando(numero_ticket)` faz a reavaliação de uma atribuição existente. Ela bloqueia a linha da atribuição e a linha de `fila_estado`, verifica se o status continua `AGUARDANDO_TECNICO`, exclui registros já classificados como Supervisão e, havendo técnicos elegíveis, muda a atribuição para `PENDENTE` e atualiza `ultimo_tecnico_id`.
+
+O servidor chama a reavaliação depois do processamento do Owner nos caminhos `/tickets` e `/owner`. Assim, um Owner reconhecido como supervisor confirma Supervisão antes de qualquer atribuição técnica. A função não varre indiscriminadamente a tabela: atua sobre o número de ticket recebido pela integração.
 
 ## 4. Por que `FOR UPDATE`
 
