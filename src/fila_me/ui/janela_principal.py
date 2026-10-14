@@ -292,6 +292,20 @@ class JanelaPrincipal:
         posicao = self.historico.posicao_vertical()
         chaves = {a["numero_ticket"] for a in linhas}
         alterado = False
+        nova_atribuicao = any(
+            atribuicao["numero_ticket"] not in self._widgets_historico
+            for atribuicao in linhas
+        )
+
+        # Reordene a lista usando exatamente a ordem retornada pelo banco.
+        # Inserir widgets antes de filhos existentes pode preservar uma ordem
+        # antiga do Pack/Tk quando chegam novas atribuições.
+        if nova_atribuicao:
+            for item in self._widgets_historico.values():
+                item["widget"].destroy()
+            self._widgets_historico.clear()
+            alterado = True
+
         for chave in tuple(self._widgets_historico):
             if chave not in chaves:
                 self._widgets_historico.pop(chave)["widget"].destroy()
@@ -321,21 +335,19 @@ class JanelaPrincipal:
             self._placeholder_historico = None
             alterado = True
 
-        # O histórico vem do mais recente para o mais antigo. Inserir ao
-        # contrário posiciona as novas linhas no topo sem recriar as antigas.
-        for atribuicao in reversed(linhas):
+        # Na chegada de uma atribuição nova, recriamos apenas as linhas
+        # recentes devolvidas pelo painel, já na ordem do banco (mais recente primeiro).
+        for atribuicao in (linhas if nova_atribuicao else reversed(linhas)):
             chave = atribuicao["numero_ticket"]
             login, propria, assinatura_linha = self.dados_apresentacao_historico(atribuicao)
             item = self._widgets_historico.get(chave)
             if item is None:
-                filhos = self.historico.conteudo.winfo_children()
                 row = self.linha(
                     self.historico.conteudo,
                     chave,
                     login,
                     atribuicao,
                     propria,
-                    before=filhos[0] if filhos else None,
                 )
                 self.historico.vincular_roda(row)
                 self._widgets_historico[chave] = {
@@ -349,7 +361,10 @@ class JanelaPrincipal:
                 alterado = True
 
         if alterado:
-            self.historico.restaurar_posicao_vertical(posicao)
+            # Registros novos ficam no topo e devem ficar visíveis imediatamente.
+            self.historico.restaurar_posicao_vertical(
+                0 if nova_atribuicao else posicao
+            )
 
     def vazio(self, lista, texto):
         self.label(lista.conteudo, texto, 10, secundario=True).pack(padx=14, pady=22, anchor="w")
@@ -398,10 +413,8 @@ class JanelaPrincipal:
         row.cadeado = self.cadeado(
             texto,
             bool(dados and dados.get("bloqueio_confirmado")),
-            propria,
         )
         row.bloqueado = bool(dados and dados.get("bloqueio_confirmado"))
-        row.propria = propria
         row.detalhe = None
         if self.prefs["modo"] == "avancado":
             detalhe = dados['status'].replace('_', ' ').capitalize()
@@ -423,11 +436,10 @@ class JanelaPrincipal:
         if row.nome_login.cget("text") != login or row.nome_login.cget("fg") != cor:
             row.nome_login.configure(text=login, fg=cor)
         bloqueado = bool(dados.get("bloqueio_confirmado"))
-        if row.bloqueado != bloqueado or row.propria != propria:
+        if row.bloqueado != bloqueado:
             row.cadeado.destroy()
-            row.cadeado = self.cadeado(row.texto, bloqueado, propria)
+            row.cadeado = self.cadeado(row.texto, bloqueado)
             row.bloqueado = bloqueado
-            row.propria = propria
         if row.detalhe is not None:
             detalhe = dados["status"].replace("_", " ").capitalize()
             if dados.get("atribuido_em"):
@@ -439,17 +451,12 @@ class JanelaPrincipal:
             if row.detalhe.cget("text") != detalhe:
                 row.detalhe.configure(text=detalhe)
 
-    def cadeado(self, parent, bloqueado, propria):
-        cor = (
-            self.c["verde"] if bloqueado and propria
-            else self.cor if propria
-            else self.c["secundario"]
-        )
+    def cadeado(self, parent, bloqueado):
+        cor = self.c["verde"] if bloqueado else self.cor
         from src.fila_me.ui.icones import carregar_icone
 
-        nome_icone = "lock" if bloqueado else "lock-open"
         imagem = carregar_icone(
-            nome_icone,
+            "lock",
             12,
             cor,
             self.root,
@@ -461,6 +468,7 @@ class JanelaPrincipal:
         )
         icone.pack(side="right", padx=(4, 2))
         icone.image = imagem
+        return icone
 
     def cancelar_aviso_copia(self):
         if getattr(self, "copia_timer", None) is not None:

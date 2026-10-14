@@ -3,6 +3,7 @@ import sys
 import tkinter as tk
 from pathlib import Path
 
+from src.fila_me.config import preferencias
 from src.fila_me.integracao.servidor_local import (
     iniciar_servidor,
 )
@@ -100,6 +101,7 @@ class Aplicacao:
             ao_logar=self.entrar,
             ao_cadastrar=self.mostrar_cadastro,
             executor=self.executor,
+            aparencia=preferencias.carregar_aparencia_login(),
         )
 
     def mostrar_cadastro(self):
@@ -115,6 +117,13 @@ class Aplicacao:
     def entrar(self, usuario):
 
         self.usuario = usuario
+        try:
+            preferencias.salvar(
+                usuario["id"],
+                preferencias.carregar(usuario["id"]),
+            )
+        except OSError:
+            pass
 
         self.limpar_tela()
 

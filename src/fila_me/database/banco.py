@@ -564,7 +564,8 @@ def buscar_painel_visual(usuario, filtro="todos"):
                     LEFT JOIN tickets t ON t.numero_ticket = a.numero_ticket
                     WHERE LOWER(a.tecnico) = LOWER(%s)
                       AND a.tipo_atribuicao <> 'SUPERVISAO'
-                    ORDER BY a.id DESC;
+                    ORDER BY a.id DESC
+                    LIMIT 20;
                     """,
                     (usuario["nome"],),
                 )
@@ -584,7 +585,8 @@ def buscar_painel_visual(usuario, filtro="todos"):
                            t.status_bloqueio, t.bloqueio_confirmado
                     FROM atribuicoes a
                     LEFT JOIN tickets t ON t.numero_ticket = a.numero_ticket
-                    ORDER BY a.id DESC;
+                    ORDER BY a.id DESC
+                    LIMIT 20;
                     """
                 )
             linhas = cursor.fetchall()
